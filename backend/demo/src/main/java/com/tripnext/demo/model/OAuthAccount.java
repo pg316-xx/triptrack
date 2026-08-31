@@ -9,6 +9,8 @@ import lombok.Setter;
 import java.time.OffsetDateTime;
 import java.util.UUID;
 
+import com.tripnext.demo.model.help.OAuthProvider;
+
 @Entity
 @Table(
     name = "oauth_accounts",

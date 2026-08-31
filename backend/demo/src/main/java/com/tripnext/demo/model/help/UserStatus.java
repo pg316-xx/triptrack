@@ -1,4 +1,4 @@
-package com.tripnext.demo.model;
+package com.tripnext.demo.model.help;
 
 /**
  * UserStatus
