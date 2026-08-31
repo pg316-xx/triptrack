@@ -5,18 +5,22 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.tripnext.demo.dto.trip.CreateTripRequest;
 import com.tripnext.demo.dto.trip.TripResponse;
-
+import com.tripnext.demo.dto.trip.UpdateTripRequest;
 import com.tripnext.demo.service.TripService;
 
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 
 import java.util.List;
+import java.util.UUID;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 
@@ -47,4 +51,34 @@ public class TripController {
                         tripService.createTrip(newTrip)
                 );
     }
+    @GetMapping("/{tripId}")
+     public ResponseEntity<TripResponse> getTrip(
+        @PathVariable UUID tripId
+    ) {
+    return ResponseEntity.ok(
+            tripService.getTrip(tripId)
+    );
+   }
+   @PatchMapping("/{tripId}")
+public ResponseEntity<TripResponse> updateTrip(
+        @PathVariable UUID tripId,
+        @RequestBody UpdateTripRequest request
+) {
+
+    return ResponseEntity.ok(
+            tripService.updateTrip(
+                    tripId,
+                    request
+            )
+    );
+}
+@DeleteMapping("/{tripId}")
+public ResponseEntity<Void> deleteTrip(
+        @PathVariable UUID tripId
+) {
+
+    tripService.deleteTrip(tripId);
+
+    return ResponseEntity.noContent().build();
+}
 }

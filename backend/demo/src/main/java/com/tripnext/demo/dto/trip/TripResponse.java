@@ -10,7 +10,7 @@ public record TripResponse(
         String name,
 
         String description,
-
+        String destination,
         LocalDate startDate,
 
         LocalDate endDate,

@@ -1,5 +1,17 @@
 package com.tripnext.demo.dto.trip;
 
-public class UpdateTripRequest {
-    
-}
+import java.time.LocalDate;
+
+public record UpdateTripRequest(
+
+        String title,
+
+        String description,
+
+        String destination,
+
+        LocalDate startDate,
+
+        LocalDate endDate
+
+) {}
