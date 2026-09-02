@@ -1,10 +1,17 @@
 package com.tripnext.demo.controller;
 
 import org.springframework.web.bind.annotation.RequestMapping;
+
 import org.springframework.web.bind.annotation.RestController;
 
+import com.tripnext.demo.dto.invitation.CreateInvitationRequest;
+import com.tripnext.demo.dto.invitation.InvitationResponse;
+import com.tripnext.demo.dto.invitation.InvitationSummaryResponse;
 import com.tripnext.demo.dto.trip.CreateTripRequest;
+import com.tripnext.demo.dto.trip.TransferOwnershipRequest;
+import com.tripnext.demo.dto.trip.TripMemberResponse;
 import com.tripnext.demo.dto.trip.TripResponse;
+import com.tripnext.demo.dto.trip.UpdateMemberRoleRequest;
 import com.tripnext.demo.dto.trip.UpdateTripRequest;
 import com.tripnext.demo.service.TripService;
 
@@ -72,13 +79,98 @@ public ResponseEntity<TripResponse> updateTrip(
             )
     );
 }
-@DeleteMapping("/{tripId}")
-public ResponseEntity<Void> deleteTrip(
+     @DeleteMapping("/{tripId}")
+     public ResponseEntity<Void> deleteTrip(
         @PathVariable UUID tripId
-) {
+     ) {
 
     tripService.deleteTrip(tripId);
 
     return ResponseEntity.noContent().build();
 }
+    @GetMapping("/{tripId}/members")
+   public ResponseEntity<List<TripMemberResponse>>
+    getTripMembers(
+        @PathVariable UUID tripId
+    ) {
+
+    return ResponseEntity.ok(
+            tripService.getTripMembers(tripId)
+    );
+}  
+      @PostMapping("/{tripId}/invitations")
+public ResponseEntity<InvitationResponse>
+createInvitation(
+        @PathVariable UUID tripId,
+        @RequestBody CreateInvitationRequest request
+) {
+
+    return ResponseEntity.ok(
+            tripService.createInvitation(
+                    tripId,
+                    request
+            )
+    );
+} 
+@DeleteMapping("/{tripId}/members/{userId}")
+public ResponseEntity<Void> removeMember(
+        @PathVariable UUID tripId,
+        @PathVariable UUID userId
+) {
+
+    tripService.removeMember(
+            tripId,
+            userId
+    );
+
+    return ResponseEntity.noContent().build();
+}     
+      @PatchMapping("/{tripId}/members/{userId}/role")
+public ResponseEntity<Void> updateMemberRole(
+        @PathVariable UUID tripId,
+        @PathVariable UUID userId,
+        @RequestBody UpdateMemberRoleRequest request
+) {
+
+    tripService.updateMemberRole(
+            tripId,
+            userId,
+            request
+    );
+
+    return ResponseEntity.ok().build();
+}
+      @GetMapping("/{tripId}/invitations")
+public ResponseEntity<List<InvitationSummaryResponse>>
+getInvitations(
+        @PathVariable UUID tripId
+) {
+
+    return ResponseEntity.ok(
+            tripService.getInvitations(tripId)
+    );
+}
+       @PostMapping("/{tripId}/leave")
+public ResponseEntity<Void> leaveTrip(
+        @PathVariable UUID tripId
+) {
+
+    tripService.leaveTrip(tripId);
+
+    return ResponseEntity.ok().build();
+}
+      @PatchMapping("/{tripId}/owner")
+public ResponseEntity<Void> transferOwnership(
+        @PathVariable UUID tripId,
+        @RequestBody TransferOwnershipRequest request
+) {
+
+    tripService.transferOwnership(
+            tripId,
+            request.userId()
+    );
+
+    return ResponseEntity.ok().build();
+}
+
 }

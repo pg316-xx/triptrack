@@ -1,5 +1,8 @@
 package com.tripnext.demo.dto.invitation;
 
-public class CreateInvitationRequest {
-    
-}
+import com.tripnext.demo.model.help.TripRole;
+
+public record CreateInvitationRequest(
+        TripRole role,
+        Integer usageLimit
+) {}

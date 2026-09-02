@@ -4,7 +4,7 @@ package com.tripnext.demo.model.help;
  * TripRole
  */
 public enum TripRole {
-OWNER,
+    OWNER,
     ADMIN,
     MEMBER
 }

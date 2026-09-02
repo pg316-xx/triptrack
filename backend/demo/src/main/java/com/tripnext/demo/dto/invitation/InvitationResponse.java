@@ -1,5 +1,10 @@
 package com.tripnext.demo.dto.invitation;
 
-public class InvitationResponse {
-    
-}
+import java.time.OffsetDateTime;
+import java.util.UUID;
+
+public record InvitationResponse(
+        UUID invitationId,
+        String inviteLink,
+        OffsetDateTime expiresAt
+) {}

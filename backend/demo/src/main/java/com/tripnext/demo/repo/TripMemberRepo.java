@@ -1,6 +1,7 @@
 package com.tripnext.demo.repo;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -22,4 +23,9 @@ boolean existsByTripAndUserAndRole(
         TripMemberRole role
 );
 void deleteByTrip(Trip trip);
+List<TripMember> findByTrip(Trip trip);
+Optional<TripMember> findByTripAndUser(
+        Trip trip,
+        User user
+);
 }
