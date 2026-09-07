@@ -23,7 +23,7 @@ import lombok.Setter;
 @Getter
 @Setter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-public class Expensesplit {
+public class ExpenseSplit {
 
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
@@ -46,7 +46,7 @@ public class Expensesplit {
     @Column(name = "split_amount", nullable = false)
     private BigDecimal splitAmount;
 
-    public Expensesplit(
+    public ExpenseSplit(
             Expense expense,
             User user,
             BigDecimal splitAmount

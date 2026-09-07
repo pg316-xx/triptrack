@@ -38,7 +38,7 @@ public class Expense {
     )
     private User paidBy;
 
-    @Column(nullable = false)
+    @Column(nullable = false, precision = 12, scale = 2)
     private BigDecimal amount;
 
     @Column(nullable = false, length = 200)
