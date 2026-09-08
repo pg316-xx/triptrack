@@ -56,11 +56,11 @@ public class Document {
     private String fileName;
 
     @Column(
-            name = "s3_key",
+            name = "file_url",
             nullable = false,
             length = 500
     )
-    private String s3Key;
+    private String fileUrl;
 
     @Enumerated(EnumType.STRING)
     @Column(
@@ -87,14 +87,14 @@ public class Document {
             Trip trip,
             User uploadedBy,
             String fileName,
-            String s3Key,
+            String fileUrl,
             DocType documentType,
             Long fileSizeBytes
     ) {
         this.trip = trip;
         this.uploadedBy = uploadedBy;
         this.fileName = fileName;
-        this.s3Key = s3Key;
+        this.fileUrl = fileUrl;
         this.documentType = documentType;
         this.fileSizeBytes = fileSizeBytes;
     }

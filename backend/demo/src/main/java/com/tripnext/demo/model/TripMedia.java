@@ -3,7 +3,8 @@ package com.tripnext.demo.model;
 import java.time.OffsetDateTime;
 import java.util.UUID;
 
-import com.tripnext.demo.model.help.MediaType;
+import com.tripnext.demo.model.help.MediaFileType;
+
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -60,7 +61,7 @@ public class TripMedia {
             name = "media_type",
             nullable = false
     )
-    private MediaType mediaType;
+    private MediaFileType mediaFileType;
 
     @Column(length = 500)
     private String caption;
@@ -75,13 +76,13 @@ public class TripMedia {
             Trip trip,
             User uploadedBy,
             String fileUrl,
-            MediaType mediaType,
+            MediaFileType mediaFileType,
             String caption
     ) {
         this.trip = trip;
         this.uploadedBy = uploadedBy;
         this.fileUrl = fileUrl;
-        this.mediaType = mediaType;
+        this.mediaFileType = mediaFileType;
         this.caption = caption;
     }
 

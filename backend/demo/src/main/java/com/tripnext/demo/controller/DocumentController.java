@@ -1,0 +1,139 @@
+package com.tripnext.demo.controller;
+
+import java.util.List;
+import java.util.UUID;
+
+
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
+
+import com.tripnext.demo.dto.document.DocumentResponse;
+import com.tripnext.demo.dto.document.TripMediaResponse;
+import com.tripnext.demo.model.help.DocType;
+import com.tripnext.demo.model.help.MediaFileType;
+import com.tripnext.demo.service.FileService;
+
+import lombok.RequiredArgsConstructor;
+
+@RestController
+@RequestMapping("/api/trips/{tripId}")
+@RequiredArgsConstructor
+public class DocumentController {
+    private final FileService fileService;
+@PostMapping(
+        value = "/documents",
+        consumes = org.springframework.http.MediaType.MULTIPART_FORM_DATA_VALUE
+)
+public ResponseEntity<DocumentResponse> uploadDocument(
+        @PathVariable UUID tripId,
+        @RequestParam("file") MultipartFile file,
+        @RequestParam DocType documentType
+) {
+
+    return ResponseEntity.ok(
+            fileService.uploadDocument(
+                    tripId,
+                    file,
+                    documentType
+            )
+    );
+}
+@PostMapping(
+        value = "/media",
+        consumes = org.springframework.http.MediaType.MULTIPART_FORM_DATA_VALUE
+)
+public ResponseEntity<TripMediaResponse> uploadMedia(
+        @PathVariable UUID tripId,
+        @RequestParam("file") MultipartFile file,
+        @RequestParam MediaFileType mediaFileType,
+        @RequestParam(required = false) String caption
+) {
+
+    return ResponseEntity.ok(
+            fileService.uploadMedia(
+                    tripId,
+                    file,
+                    mediaFileType,
+                    caption
+            )
+    );
+}
+@GetMapping("/documents")
+public ResponseEntity<List<DocumentResponse>>
+getDocuments(
+        @PathVariable UUID tripId
+) {
+
+    return ResponseEntity.ok(
+            fileService.getDocuments(
+                    tripId
+            )
+    );
+}
+@GetMapping("/media")
+public ResponseEntity<List<TripMediaResponse>>
+getMedia(
+        @PathVariable UUID tripId
+) {
+
+    return ResponseEntity.ok(
+            fileService.getMedia(
+                    tripId
+            )
+    );
+}
+@DeleteMapping("/documents/{documentId}")
+public ResponseEntity<Void> deleteDocument(
+        @PathVariable UUID documentId
+) {
+
+    fileService.deleteDocument(
+            documentId
+    );
+
+    return ResponseEntity.noContent()
+            .build();
+}
+@DeleteMapping("/media/{mediaId}")
+public ResponseEntity<Void> deleteMedia(
+        @PathVariable UUID mediaId
+) {
+
+    fileService.deleteMedia(
+            mediaId
+    );
+
+    return ResponseEntity.noContent()
+            .build();
+}
+@GetMapping("/documents/{documentId}")
+public ResponseEntity<DocumentResponse> getDocument(
+        @PathVariable UUID documentId
+) {
+    return ResponseEntity.ok(
+            fileService.getDocument(
+                    documentId
+            )
+    );
+}
+@GetMapping("/media/{mediaId}")
+public ResponseEntity<TripMediaResponse> getMediaById(
+        @PathVariable UUID mediaId
+) {
+    return ResponseEntity.ok(
+            fileService.getMediaById(
+                    mediaId
+            )
+    );
+}
+
+}
+
+
