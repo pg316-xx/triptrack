@@ -1,0 +1,3 @@
+ALTER TABLE documents
+DROP COLUMN IF EXISTS s3_key;
+
