@@ -119,6 +119,28 @@ public class SupabaseStorageService implements FileStorageService {
     public void deleteFile(
             String fileUrl
     ) {
-        // implement later
+        try {
+            String basePath = supabaseUrl + "/storage/v1/object/public/";
+            if (!fileUrl.startsWith(basePath)) {
+                return; 
+            }
+
+            String bucketAndPath = fileUrl.substring(basePath.length()); 
+
+            Request request = new Request.Builder()
+                    .url(supabaseUrl + "/storage/v1/object/" + bucketAndPath)
+                    .addHeader("Authorization", "Bearer " + serviceKey)
+                    .addHeader("apikey", serviceKey)
+                    .delete()
+                    .build();
+
+            try (Response response = client.newCall(request).execute()) {
+                if (!response.isSuccessful()) {
+                    System.err.println("Failed to delete file from Supabase: " + response.code());
+                }
+            }
+        } catch (Exception e) {
+            System.err.println("Error deleting file from Supabase: " + e.getMessage());
+        }
     }
 }

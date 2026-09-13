@@ -13,6 +13,8 @@ import java.util.UUID;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 
 import com.tripnext.demo.dto.expense.BalanceResponse;
@@ -25,6 +27,7 @@ import com.tripnext.demo.dto.expense.UpdateExpenseRequest;
 import com.tripnext.demo.exception.ResourceNotFoundException;
 import com.tripnext.demo.exception.UnauthorizedException;
 import com.tripnext.demo.model.Expense;
+import com.tripnext.demo.model.help.NotificationType;
 import com.tripnext.demo.model.ExpenseSplit;
 import com.tripnext.demo.model.IdempotencyKey;
 import com.tripnext.demo.model.Settlement;
@@ -52,7 +55,10 @@ public class ExpenseService {
     private final CurrentUserService currentUserService;
     private final SettlementRepo settlementRepo;
     private final IdempotencyKeyRepo idempotencyKeyRepo;
+    private final NotificationService notificationService;
+    private final AuditLogService auditLogService;
     @Transactional
+    @CacheEvict(value = "tripExpenses", key = "#tripId")
 public ExpenseResponse createExpense(
         UUID tripId,
         CreateExpenseRequest request,
@@ -192,6 +198,17 @@ if (existingKey.isPresent()) {
                 );
 
         expenseSplitRepo.save(split);
+
+        if (!participant.getId().equals(currentUser.getId())) {
+            notificationService.createNotification(
+                    participant,
+                    trip,
+                    NotificationType.EXPENSE_ADDED,
+                    "New Expense Added",
+                    currentUser.getName() + " added an expense: " + request.title(),
+                    "/trips/" + tripId + "/expenses"
+            );
+        }
     }
 
     return new ExpenseResponse(
@@ -204,6 +221,7 @@ if (existingKey.isPresent()) {
             savedExpense.getCreatedAt()
     );
 }
+    @Cacheable(value = "tripExpenses", key = "#tripId")
 public Page<ExpenseResponse> getExpenses(
         UUID tripId,
         Pageable pageable
@@ -243,7 +261,8 @@ public Page<ExpenseResponse> getExpenses(
                 expense.getCreatedAt()
         ));
 }
-@Transactional
+    @Transactional
+    @CacheEvict(value = "tripExpenses", allEntries = true)
 public ExpenseResponse updateExpense(
         UUID expenseId,
         UpdateExpenseRequest request
@@ -276,6 +295,14 @@ public ExpenseResponse updateExpense(
     Expense saved =
             expenseRepo.save(expense);
 
+    auditLogService.logAction(
+            saved.getTrip(),
+            "UPDATE",
+            "Expense",
+            saved.getId(),
+            "Expense details updated"
+    );
+
     return new ExpenseResponse(
             saved.getId(),
             saved.getTitle(),
@@ -286,8 +313,11 @@ public ExpenseResponse updateExpense(
             saved.getCreatedAt()
     );
 }
-   @Transactional
-public void deleteExpense(UUID expenseId) {
+    @Transactional
+    @CacheEvict(value = "tripExpenses", allEntries = true)
+public void deleteExpense(
+        UUID expenseId
+) {
 
     User currentUser =
             currentUserService.getCurrentUser();
@@ -309,8 +339,15 @@ public void deleteExpense(UUID expenseId) {
     }
 
     expenseSplitRepo.deleteByExpense(expense);
-
     expenseRepo.delete(expense);
+
+    auditLogService.logAction(
+            expense.getTrip(),
+            "DELETE",
+            "Expense",
+            expenseId,
+            "Deleted expense: " + expense.getTitle()
+    );
 }
  public List<BalanceResponse> getBalances(
         UUID tripId

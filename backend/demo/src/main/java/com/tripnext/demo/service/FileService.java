@@ -4,6 +4,8 @@ import java.util.List;
 import java.util.UUID;
 
 
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -38,7 +40,9 @@ public class FileService {
     private final CurrentUserService currentUserService;
     private final FileStorageService fileStorageService;
     private final FileValidator fileValidator;
+    private final AuditLogService auditLogService;
     @Transactional
+    @CacheEvict(value = "tripDocuments", key = "#tripId")
 public DocumentResponse uploadDocument(
         UUID tripId,
         MultipartFile file,
@@ -92,6 +96,7 @@ public DocumentResponse uploadDocument(
 }
 
    @Transactional
+   @CacheEvict(value = "tripMedia", key = "#tripId")
 public TripMediaResponse uploadMedia(
         UUID tripId,
         MultipartFile file,
@@ -143,6 +148,7 @@ public TripMediaResponse uploadMedia(
             saved.getCreatedAt()
     );
 }
+    @Cacheable(value = "tripDocuments", key = "#tripId")
 public List<DocumentResponse> getDocuments(
         UUID tripId
 ) {
@@ -165,6 +171,7 @@ public List<DocumentResponse> getDocuments(
             ))
             .toList();
 }
+    @Cacheable(value = "tripMedia", key = "#tripId")
 public List<TripMediaResponse> getMedia(
         UUID tripId
 ) {
@@ -187,6 +194,7 @@ public List<TripMediaResponse> getMedia(
             .toList();
 }
 @Transactional
+@CacheEvict(value = "tripDocuments", allEntries = true)
 public void deleteDocument(
         UUID documentId
 ) {
@@ -206,8 +214,17 @@ validateCanManageFiles(trip);
     );
 
     documentRepo.delete(document);
+
+    auditLogService.logAction(
+            trip,
+            "DELETE",
+            "Document",
+            documentId,
+            "Deleted document: " + document.getFileName()
+    );
 }
 @Transactional
+@CacheEvict(value = "tripMedia", allEntries = true)
 public void deleteMedia(
         UUID mediaId
 ) {
@@ -226,6 +243,14 @@ public void deleteMedia(
     );
 
     tripMediaRepo.delete(media);
+
+    auditLogService.logAction(
+            trip,
+            "DELETE",
+            "Media",
+            mediaId,
+            "Deleted media file"
+    );
 }
 private Trip getTripAndValidateMembership(
         UUID tripId

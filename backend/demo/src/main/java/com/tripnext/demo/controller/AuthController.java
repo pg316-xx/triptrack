@@ -5,10 +5,12 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.tripnext.demo.dto.auth.AuthResponse;
+import com.tripnext.demo.dto.auth.GoogleLoginRequest;
 import com.tripnext.demo.dto.auth.LoginRequest;
 import com.tripnext.demo.dto.auth.RefreshTokenRequest;
 import com.tripnext.demo.dto.auth.RegisterRequest;
 import com.tripnext.demo.service.AuthService;
+import com.tripnext.demo.service.OAuthService;
 
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -18,9 +20,11 @@ import org.springframework.web.bind.annotation.PostMapping;
 public class AuthController {
 
     private final AuthService authService;
+    private final OAuthService oauthService;
 
-    public AuthController(AuthService authService) {
+    public AuthController(AuthService authService, OAuthService oauthService) {
         this.authService = authService;
+        this.oauthService = oauthService;
     }
 
     @PostMapping("/register")
@@ -54,6 +58,10 @@ public class AuthController {
 
     return ResponseEntity.ok().build();
     }
-    
-    
+    @PostMapping("/google-login")
+    public AuthResponse googleLogin(
+            @RequestBody GoogleLoginRequest request
+    ) {
+        return oauthService.verifyGoogleTokenAndLogin(request.idToken());
+    }
 }

@@ -75,7 +75,8 @@ DaoAuthenticationProvider authenticationProvider() {
 
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(
-                                "/api/auth/**"
+                                "/api/auth/**",
+                                "/ws-trip/**"
                         ).permitAll()
 
                         .anyRequest()

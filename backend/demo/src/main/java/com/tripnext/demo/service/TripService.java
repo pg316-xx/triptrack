@@ -5,6 +5,8 @@ import java.util.List;
 import java.util.UUID;
 
 
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 
@@ -39,8 +41,8 @@ public class TripService {
     private final TripRepo tripRepo;
     private final UserRepo userRepo;
     private final TripMemberRepo tripMemberRepo;
-    
     private final TripInvitationRepo tripInvitationRepo;
+    private final AuditLogService auditLogService;
 
     public List<TripResponse> getTrips() {
 
@@ -120,6 +122,7 @@ public class TripService {
                 );
     }
 
+    @Cacheable(value = "trips", key = "#tripId")
     public TripResponse getTrip(
         UUID tripId
 ) {
@@ -156,6 +159,7 @@ public class TripService {
     );
 }
 @Transactional
+@CacheEvict(value = "trips", key = "#tripId")
 public TripResponse updateTrip(
         UUID tripId,
         UpdateTripRequest request
@@ -210,6 +214,14 @@ public TripResponse updateTrip(
 
     Trip updatedTrip = tripRepo.save(trip);
 
+    auditLogService.logAction(
+            updatedTrip,
+            "UPDATE",
+            "Trip",
+            updatedTrip.getId(),
+            "Trip details updated"
+    );
+
     return new TripResponse(
             updatedTrip.getId(),
             updatedTrip.getTitle(),
@@ -221,6 +233,7 @@ public TripResponse updateTrip(
     );
 }
 @Transactional
+@CacheEvict(value = "trips", key = "#tripId")
 public void deleteTrip(UUID tripId) {
 
     User currentUser = getCurrentUser();
@@ -467,6 +480,14 @@ public void removeMember(
             );
 
     tripMemberRepo.delete(membership);
+
+    auditLogService.logAction(
+            trip,
+            "REMOVE_MEMBER",
+            "TripMember",
+            targetUser.getId(),
+            "Removed user: " + targetUser.getName()
+    );
 } 
         @Transactional
 public void updateMemberRole(
@@ -528,8 +549,15 @@ public void updateMemberRole(
     }
 
     membership.setRole(request.role());
-
     tripMemberRepo.save(membership);
+
+    auditLogService.logAction(
+            trip,
+            "UPDATE_ROLE",
+            "TripMember",
+            targetUser.getId(),
+            "Role updated to: " + request.role().name()
+    );
 }
      @Transactional
 public void revokeInvitation(
@@ -701,5 +729,13 @@ public void transferOwnership(
 
     tripMemberRepo.save(currentOwner);
     tripMemberRepo.save(newOwnerMembership);
+
+    auditLogService.logAction(
+            trip,
+            "TRANSFER_OWNERSHIP",
+            "Trip",
+            trip.getId(),
+            "Transferred ownership to: " + newOwnerUser.getName()
+    );
 }
 }
