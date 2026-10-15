@@ -2,6 +2,7 @@ package com.tripnext.demo.config;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Date;
+import java.util.UUID;
 
 import javax.crypto.SecretKey;
 
@@ -39,6 +40,7 @@ public class JwtService {
         );
 
         return Jwts.builder()
+                .id(UUID.randomUUID().toString())
                 .subject(email)
                 .issuedAt(now)
                 .expiration(expiry)
@@ -54,7 +56,11 @@ public class JwtService {
                 now.getTime() + refreshTokenExpiration
         );
 
+        // A unique jti makes every token distinct. Without it, two tokens for
+        // the same user in the same second (register, then the immediate
+        // login) are byte-identical and collide on refresh_tokens.token_hash.
         return Jwts.builder()
+                .id(UUID.randomUUID().toString())
                 .subject(email)
                 .issuedAt(now)
                 .expiration(expiry)
