@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { trips as tripsApi, wallet } from '../api'
 import { errMsg } from '../api/client'
 import { Empty } from '../components/ui'
+import PageBanner from '../components/PageBanner'
 
 const TYPES = ['TICKET', 'CONFIRMATION', 'ID']
 const TYPE_ICON = { TICKET: '🎫', CONFIRMATION: '🧾', ID: '🪪' }
@@ -59,8 +60,9 @@ export default function Wallet() {
 
   return (
     <>
-      <h2>👛 Travel wallet</h2>
-      <p className="muted" style={{ marginTop: -6 }}>Your tickets, confirmations and IDs. Private unless you share one with a trip.</p>
+      <PageBanner eyebrow="Travel wallet" title="Your tickets, all in one place"
+        text="Boarding passes, booking confirmations and IDs. Private unless you share one with a trip."
+        image="/images/story-backpacker.jpg" />
       {error && <div className="error">{error}</div>}
 
       <form className="card" onSubmit={add}>

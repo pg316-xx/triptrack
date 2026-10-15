@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { notifications } from '../api'
 import { errMsg } from '../api/client'
 import { Empty } from '../components/ui'
+import PageBanner from '../components/PageBanner'
 
 export default function Notifications() {
   const [items, setItems] = useState([])
@@ -19,12 +20,12 @@ export default function Notifications() {
 
   return (
     <>
-      <div className="page-head">
-        <h2>Notifications</h2>
+      <PageBanner eyebrow="Alerts" title="What's new with your trips"
+        text="Invites, new expenses and updates from your travel crew.">
         <button className="secondary small" disabled={!items.some((n) => !n.isRead)} onClick={async () => { await notifications.markAllRead(); load() }}>
           Mark all read
         </button>
-      </div>
+      </PageBanner>
       {error && <div className="error">{error}</div>}
       {items.length === 0 && <Empty icon="🔔" title="You're all caught up">New invites, expenses and messages will show up here.</Empty>}
       {items.map((n) => (

@@ -3,7 +3,8 @@ import { useParams, useNavigate, Link } from 'react-router-dom'
 import { trips } from '../api'
 import { errMsg } from '../api/client'
 import { useAuth } from '../context/AuthContext'
-import { Spinner, fmtDate, gradientFor, tripLength, tripStatus } from '../components/ui'
+import { Spinner, fmtDate, tripImage, tripLength, tripStatus } from '../components/ui'
+import { IconArrowLeft, IconCalendar, IconChat, IconFolder, IconHistory, IconMoney, IconPin, IconRoute, IconUsers } from '../components/icons'
 import ItineraryTab from '../components/trip/ItineraryTab'
 import ExpensesTab from '../components/trip/ExpensesTab'
 import ChatTab from '../components/trip/ChatTab'
@@ -12,12 +13,12 @@ import MembersTab from '../components/trip/MembersTab'
 import ActivityTab from '../components/trip/ActivityTab'
 
 const TABS = [
-  ['Itinerary', '🗓️'],
-  ['Expenses', '💸'],
-  ['Chat', '💬'],
-  ['Files', '📁'],
-  ['Members', '👥'],
-  ['Activity', '📜'],
+  ['Itinerary', IconRoute],
+  ['Expenses', IconMoney],
+  ['Chat', IconChat],
+  ['Files', IconFolder],
+  ['Members', IconUsers],
+  ['Activity', IconHistory],
 ]
 
 export default function TripDetail() {
@@ -58,8 +59,8 @@ export default function TripDetail() {
 
   return (
     <>
-      <Link to="/" className="muted" style={{ display: 'inline-block', marginBottom: 12 }}>← All trips</Link>
-      <div className="hero" style={{ background: gradientFor(trip.id) }}>
+      <Link to="/" className="back-link"><IconArrowLeft size={16} /> All trips</Link>
+      <div className="hero" style={{ backgroundImage: `url(${tripImage(trip.id, trip.destination)})` }}>
         <div className="row between" style={{ alignItems: 'flex-start' }}>
           <div>
             <div className="row" style={{ marginBottom: 6 }}>
@@ -68,9 +69,9 @@ export default function TripDetail() {
             </div>
             <h2>{trip.name}</h2>
             <div className="meta">
-              <span>📍 {trip.destination}</span>
-              <span>🗓️ {fmtDate(trip.startDate)} – {fmtDate(trip.endDate)}{days ? ` · ${days} days` : ''}</span>
-              <span>👥 {members.length} member{members.length === 1 ? '' : 's'}</span>
+              <span><IconPin size={16} /> {trip.destination}</span>
+              <span><IconCalendar size={16} /> {fmtDate(trip.startDate)} – {fmtDate(trip.endDate)}{days ? ` · ${days} days` : ''}</span>
+              <span><IconUsers size={16} /> {members.length} member{members.length === 1 ? '' : 's'}</span>
             </div>
           </div>
           {canManage && (
@@ -84,9 +85,9 @@ export default function TripDetail() {
       </div>
 
       <div className="tabs" role="tablist">
-        {TABS.map(([t, icon]) => (
+        {TABS.map(([t, Icon]) => (
           <button key={t} role="tab" aria-selected={tab === t} className={tab === t ? 'active' : ''} onClick={() => setTab(t)}>
-            {icon} {t}
+            <Icon size={17} /> {t}
           </button>
         ))}
       </div>

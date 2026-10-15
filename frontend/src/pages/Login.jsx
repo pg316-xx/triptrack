@@ -2,6 +2,8 @@ import { useState } from 'react'
 import { Link, useNavigate, Navigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { errMsg } from '../api/client'
+import AuthLayout from '../components/AuthLayout'
+import { IconArrowRight } from '../components/icons'
 
 export default function Login() {
   const { user, login } = useAuth()
@@ -28,10 +30,10 @@ export default function Login() {
   }
 
   return (
-    <div className="auth-wrap">
+    <AuthLayout title="Your crew is waiting." text="Jump back into your itineraries, shared costs and group chat.">
       <form className="card auth" onSubmit={submit}>
-        <div className="brand"><span className="brand-mark">🧭</span>TripNest</div>
-        <h2>Welcome back</h2>
+        <div className="eyebrow">Welcome back</div>
+        <h2 style={{ marginTop: 6 }}>Log in to TripNest</h2>
         <p className="muted sub">Plan, split and chat with your travel crew.</p>
         {error && <div className="error">{error}</div>}
         <div className="field">
@@ -42,9 +44,10 @@ export default function Login() {
           <label htmlFor="password">Password</label>
           <input id="password" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} required />
         </div>
-        <button className="block" disabled={busy}>{busy ? 'Logging in…' : 'Log in'}</button>
+        <button className="block accent" disabled={busy}>{busy ? 'Logging in…' : 'Log in'} <IconArrowRight size={16} /></button>
         <p className="muted foot">No account? <Link to="/register">Create one</Link></p>
+        <p className="muted foot" style={{ marginTop: 6 }}><Link to="/" style={{ color: 'var(--muted)' }}>← Back to home</Link></p>
       </form>
-    </div>
+    </AuthLayout>
   )
 }

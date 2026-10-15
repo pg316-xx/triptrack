@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useSearchParams, Link } from 'react-router-dom'
 import { invitations } from '../api'
 import { errMsg } from '../api/client'
+import PageBanner from '../components/PageBanner'
 
 // The backend returns an invite link like http://localhost:5173/invite?token=XYZ, which lands here
 // and accepts automatically. Users can also paste a link or bare token into the form.
@@ -28,16 +29,19 @@ export default function Invite() {
   useEffect(() => { if (params.get('token')) accept() }, []) // eslint-disable-line
 
   return (
-    <form className="card" onSubmit={accept} style={{ maxWidth: 560 }}>
-      <h2>🎟️ Join a trip</h2>
-      <p className="muted" style={{ marginTop: 0 }}>Paste the invite link a friend shared with you.</p>
+    <>
+    <PageBanner eyebrow="Join a trip" title="Got an invite? Hop aboard."
+      text="Paste the invite link a friend shared with you to join their trip."
+      image="/images/story-trail.jpg" />
+    <form className="card" onSubmit={accept} style={{ maxWidth: 620 }}>
       <div className="field">
         <label>Invite link or token</label>
         <input value={value} onChange={(e) => setValue(e.target.value)} placeholder="https://…/accept?token=…" required autoFocus />
       </div>
-      <button>Accept invitation</button>
+      <button className="accent">Accept invitation</button>
       {status?.ok && <div className="success" style={{ marginTop: 12 }}>✅ You're in! <Link to="/">Go to your trips →</Link></div>}
       {status && !status.ok && <div className="error" style={{ marginTop: 12 }}>{status.msg}</div>}
     </form>
+    </>
   )
 }

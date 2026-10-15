@@ -3,6 +3,7 @@ import { users } from '../api'
 import { useAuth } from '../context/AuthContext'
 import { errMsg } from '../api/client'
 import { Avatar } from '../components/ui'
+import PageBanner from '../components/PageBanner'
 
 export default function Profile() {
   const { user, reloadUser } = useAuth()
@@ -22,7 +23,9 @@ export default function Profile() {
   }
 
   return (
-    <form className="card" onSubmit={save} style={{ maxWidth: 560 }}>
+    <>
+    <PageBanner eyebrow="Profile" title="Your traveller profile" text="How your name and photo appear to your travel crew." />
+    <form className="card" onSubmit={save} style={{ maxWidth: 620 }}>
       <div className="row" style={{ gap: 16, marginBottom: 20 }}>
         <Avatar name={name || user.name} id={user.id} src={img || undefined} size="lg" />
         <div>
@@ -32,7 +35,8 @@ export default function Profile() {
       </div>
       <div className="field"><label>Name</label><input value={name} onChange={(e) => setName(e.target.value)} minLength={2} maxLength={100} required /></div>
       <div className="field"><label>Profile image URL</label><input type="url" placeholder="https://…" value={img} onChange={(e) => setImg(e.target.value)} /></div>
-      <div className="row"><button>Save changes</button> <span className="muted">{msg}</span></div>
+      <div className="row"><button className="accent">Save changes</button> <span className="muted">{msg}</span></div>
     </form>
+    </>
   )
 }

@@ -1,13 +1,13 @@
 // Small shared presentational helpers.
 
 const PALETTE = [
-  ['#6366f1', '#06b6d4'],
-  ['#f43f5e', '#f59e0b'],
-  ['#10b981', '#06b6d4'],
-  ['#8b5cf6', '#ec4899'],
-  ['#0ea5e9', '#6366f1'],
-  ['#f97316', '#e11d48'],
-  ['#14b8a6', '#84cc16'],
+  ['#1f4d36', '#3f7d58'],
+  ['#f28a1e', '#f6b04f'],
+  ['#2f6f73', '#58a3a0'],
+  ['#8a5a2b', '#c48a4e'],
+  ['#3b5d2a', '#7fa35a'],
+  ['#c8572b', '#f08a4b'],
+  ['#24506b', '#4f8bb0'],
 ]
 
 const hash = (s = '') => [...String(s)].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7)
@@ -71,3 +71,24 @@ export const tripLength = (start, end) =>
 
 export const fmtDate = (d, opts = { day: 'numeric', month: 'short', year: 'numeric' }) =>
   d ? toDate(d).toLocaleDateString(undefined, opts) : ''
+
+// Scenic photo for a trip: matched to the destination when we have a fitting
+// one, otherwise a stable pick from public/images/trip-1..10.jpg by id.
+const PLACE_PHOTOS = [
+  [/goa|beach|kerala|caribbean|thailand|phuket/i, 1],
+  [/paris|france/i, 2],
+  [/japan|tokyo|kyoto|osaka|fuji/i, 3],
+  [/lake|canada|finland|sweden|norway/i, 4],
+  [/scotland|ireland|\buk\b|england|wales|highland/i, 5],
+  [/bali|indonesia/i, 6],
+  [/italy|cinque|amalfi|rome|venice|europe/i, 7],
+  [/hawaii|maldives|island|sri lanka/i, 8],
+  [/desert|nevada|utah|arizona|road trip|\busa\b|america/i, 9],
+  [/mountain|himalaya|alps|trek|hike|manali|nepal/i, 10],
+]
+
+export const tripImage = (key, destination = "") => {
+  const match = PLACE_PHOTOS.find(([re]) => re.test(destination || ""))
+  const n = match ? match[1] : (hash(key) % 10) + 1
+  return `/images/trip-${n}.jpg`
+}
