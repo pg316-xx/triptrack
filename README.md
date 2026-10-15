@@ -56,7 +56,6 @@ The system focuses on distributed system concepts including:
 ### Expense Management
 
 - Shared expense tracking
-- Multi-currency support
 - Expense splitting
 - Settlement recording
 - Financial ledger management
@@ -129,14 +128,13 @@ The expense subsystem maintains transactional consistency for expense creation, 
 
 ### Contextual RBAC
 
-Permissions are enforced at the trip level with four roles:
+Permissions are enforced at the trip level with three roles:
 
 | Role | Permissions |
 |--------|------------|
 | Owner | Full control |
 | Admin | Management operations |
 | Member | Collaboration actions |
-| Viewer | Read-only access |
 
 ### Distributed Design Patterns
 

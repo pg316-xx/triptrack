@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.UUID;
 
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -44,6 +45,10 @@ public class TripService {
     private final TripInvitationRepo tripInvitationRepo;
     private final AuditLogService auditLogService;
 
+    @Value("${app.frontend-url}")
+    private String frontendUrl;
+
+@Transactional
     public List<TripResponse> getTrips() {
 
         User currentUser = getCurrentUser();
@@ -122,7 +127,9 @@ public class TripService {
                 );
     }
 
-    @Cacheable(value = "trips", key = "#tripId")
+    // Not cached: the membership check below must run for every caller, and the
+    // Redis JSON serializer cannot round-trip a record with LocalDate fields.
+@Transactional
     public TripResponse getTrip(
         UUID tripId
 ) {
@@ -263,6 +270,7 @@ public void deleteTrip(UUID tripId) {
     tripRepo.delete(trip);
 }
 
+@Transactional
 public List<TripMemberResponse> getTripMembers(
         UUID tripId
 ) {
@@ -349,7 +357,7 @@ public InvitationResponse createInvitation(
             tripInvitationRepo.save(invitation);
 
     String inviteLink =
-            "http://localhost:8080/api/invitations/accept?token="
+            frontendUrl + "/invite?token="
                     + rawToken;
 
     return new InvitationResponse(
@@ -593,6 +601,7 @@ public void revokeInvitation(
 
     tripInvitationRepo.save(invitation);
 } 
+@Transactional
         public List<InvitationSummaryResponse> getInvitations(
         UUID tripId
 ) {

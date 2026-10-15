@@ -34,6 +34,7 @@ public class AuditLogService {
     /**
      * Fetch audit logs for a trip. Only OWNER and ADMIN can access.
      */
+@Transactional
     public Page<AuditLogResponse> getTripAuditLogs(UUID tripId, Pageable pageable) {
         User currentUser = currentUserService.getCurrentUser();
 

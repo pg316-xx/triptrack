@@ -26,6 +26,7 @@ public class NotificationService {
     private final CurrentUserService currentUserService;
     private final SimpMessagingTemplate messagingTemplate;
 
+@Transactional
     public Page<NotificationResponse> getNotifications(Pageable pageable) {
         User currentUser = currentUserService.getCurrentUser();
         
@@ -34,6 +35,7 @@ public class NotificationService {
                 .map(this::map);
     }
 
+@Transactional
     public long getUnreadCount() {
         User currentUser = currentUserService.getCurrentUser();
         return notificationRepo.countByUserAndIsReadFalse(currentUser);

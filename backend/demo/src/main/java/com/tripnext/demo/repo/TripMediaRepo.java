@@ -17,4 +17,5 @@ public interface TripMediaRepo extends JpaRepository<TripMedia, UUID>{
         UUID id,
         Trip trip
 );
+    boolean existsByStorageKey(String storageKey);
 }

@@ -12,9 +12,13 @@ import com.tripnext.demo.dto.itinerary.CreateActivityRequest;
 import com.tripnext.demo.dto.itinerary.CreateItineraryDayRequest;
 import com.tripnext.demo.dto.itinerary.ItineraryDayDetailResponse;
 import com.tripnext.demo.dto.itinerary.ItineraryDayResponse;
+import com.tripnext.demo.dto.itinerary.ItineraryEvent;
 import com.tripnext.demo.dto.itinerary.ItineraryResponse;
+import com.tripnext.demo.dto.itinerary.MoveActivityRequest;
 import com.tripnext.demo.dto.itinerary.UpdateActivityRequest;
 import com.tripnext.demo.dto.itinerary.UpdateItineraryDayRequest;
+import com.tripnext.demo.exception.BadRequestException;
+import com.tripnext.demo.exception.ConflictException;
 import com.tripnext.demo.exception.ResourceNotFoundException;
 import com.tripnext.demo.exception.UnauthorizedException;
 import com.tripnext.demo.model.Activity;
@@ -27,6 +31,7 @@ import com.tripnext.demo.repo.ActivityRepo;
 import com.tripnext.demo.repo.ItineraryDayRepo;
 import com.tripnext.demo.repo.TripMemberRepo;
 import com.tripnext.demo.repo.TripRepo;
+import com.tripnext.demo.util.LexoRank;
 
 
 import jakarta.transaction.Transactional;
@@ -39,6 +44,79 @@ public class ItineraryDayService {
     private final TripMemberRepo tripMemberRepo;
     private final ActivityRepo activityRepo;
     private final CurrentUserService currentUserService;
+    private final ItineraryEventPublisher itineraryEventPublisher;
+
+    private void publish(
+            Trip trip,
+            String type,
+            UUID dayId,
+            UUID activityId,
+            User actor,
+            Object data
+    ) {
+        itineraryEventPublisher.publish(
+                trip.getId(),
+                new ItineraryEvent(type, dayId, activityId, actor.getId(), data)
+        );
+    }
+
+    private ActivityResponse toResponse(Activity activity) {
+        return new ActivityResponse(
+                activity.getId(),
+                activity.getTitle(),
+                activity.getDescription(),
+                activity.getLocation(),
+                activity.getLatitude(),
+                activity.getLongitude(),
+                activity.getStartTime(),
+                activity.getEndTime(),
+                activity.getEstimatedCost(),
+                activity.getOrderIndex(),
+                activity.getVersion()
+        );
+    }
+
+    private void validateActivityFields(
+            String title,
+            java.time.OffsetDateTime startTime,
+            java.time.OffsetDateTime endTime,
+            BigDecimal estimatedCost
+    ) {
+        if (title == null || title.isBlank()) {
+            throw new BadRequestException(
+                    "Title is required"
+            );
+        }
+        if (startTime != null && endTime != null
+                && !endTime.isAfter(startTime)) {
+            throw new BadRequestException(
+                    "End time must be after start time"
+            );
+        }
+        if (estimatedCost != null
+                && estimatedCost.compareTo(BigDecimal.ZERO) < 0) {
+            throw new BadRequestException(
+                    "Estimated cost cannot be negative"
+            );
+        }
+    }
+
+    private void checkVersion(
+            Activity activity,
+            Integer version
+    ) {
+        if (version == null) {
+            throw new BadRequestException(
+                    "version is required"
+            );
+        }
+        if (!activity.getVersion().equals(version)) {
+            throw new ConflictException(
+                    "Activity was modified by another user. Reload and try again."
+            );
+        }
+    }
+
     private void validateTripAdminAccess(
             Trip trip,
             User user
@@ -62,6 +140,7 @@ public class ItineraryDayService {
             );
         }
     }
+@Transactional
     public List<ItineraryDayResponse> getItineraryDays(
         UUID tripId
 ) {
@@ -125,7 +204,7 @@ public ItineraryDayResponse createItineraryDay(
         trip,
         request.dayNumber()
 )) {
-    throw new IllegalArgumentException(
+    throw new BadRequestException(
             "Day number already exists"
     );
 }
@@ -137,14 +216,14 @@ public ItineraryDayResponse createItineraryDay(
             request.notes()
     );
     if (request.dayNumber() <= 0) {
-    throw new IllegalArgumentException(
+    throw new BadRequestException(
             "Day number must be greater than 0"
     );
 }
 if (request.date().isBefore(trip.getStartDate())
         || request.date().isAfter(trip.getEndDate())) {
 
-    throw new IllegalArgumentException(
+    throw new BadRequestException(
             "Date must be within trip duration"
     );
 }
@@ -152,13 +231,17 @@ if (request.date().isBefore(trip.getStartDate())
     ItineraryDay saved =
             itineraryDayRepo.save(day);
 
-    return new ItineraryDayResponse(
+    ItineraryDayResponse response = new ItineraryDayResponse(
             saved.getId(),
             saved.getDayNumber(),
             saved.getDate(),
             saved.getTitle(),
             saved.getNotes()
     );
+
+    publish(trip, "DAY_CREATED", saved.getId(), null, currentUser, response);
+
+    return response;
 }
     @Transactional
 public ItineraryDayResponse updateItineraryDay(
@@ -202,13 +285,17 @@ public ItineraryDayResponse updateItineraryDay(
     ItineraryDay saved =
             itineraryDayRepo.save(day);
 
-    return new ItineraryDayResponse(
+    ItineraryDayResponse response = new ItineraryDayResponse(
             saved.getId(),
             saved.getDayNumber(),
             saved.getDate(),
             saved.getTitle(),
             saved.getNotes()
     );
+
+    publish(trip, "DAY_UPDATED", saved.getId(), null, currentUser, response);
+
+    return response;
 }
 @Transactional
 public void deleteItineraryDay(
@@ -246,6 +333,8 @@ public void deleteItineraryDay(
     }
 
     itineraryDayRepo.delete(day);
+
+    publish(trip, "DAY_DELETED", dayId, null, currentUser, null);
 }
 @Transactional
 public ActivityResponse createActivity(
@@ -282,14 +371,21 @@ public ActivityResponse createActivity(
                 "Day does not belong to this trip"
         );
     }
-    if (activityRepo.existsByItineraryDayAndOrderIndex(
-        day,
-        request.orderIndex()
-)) {
-    throw new IllegalArgumentException(
-            "Order index already exists"
+
+    validateActivityFields(
+            request.title(),
+            request.startTime(),
+            request.endTime(),
+            request.estimatedCost()
     );
-}
+
+    // Append to the end of the day.
+    String rank = LexoRank.between(
+            activityRepo.findFirstByItineraryDayOrderByOrderIndexDesc(day)
+                    .map(Activity::getOrderIndex)
+                    .orElse(null),
+            null
+    );
 
     Activity activity = new Activity(
             day,
@@ -302,39 +398,17 @@ public ActivityResponse createActivity(
             request.startTime(),
             request.endTime(),
             request.estimatedCost(),
-            request.orderIndex()
+            rank
     );
-    if (!request.endTime()
-        .isAfter(request.startTime())) {
-
-    throw new IllegalArgumentException(
-            "End time must be after start time"
-    );
-}
-    if (request.estimatedCost()
-        .compareTo(BigDecimal.ZERO) < 0) {
-
-    throw new IllegalArgumentException(
-            "Estimated cost cannot be negative"
-    );
-}
 
     Activity saved =
-            activityRepo.save(activity);
+            activityRepo.saveAndFlush(activity);
 
-    return new ActivityResponse(
-            saved.getId(),
-            saved.getTitle(),
-            saved.getDescription(),
-            saved.getLocation(),
-            saved.getLatitude(),
-            saved.getLongitude(),
-            saved.getStartTime(),
-            saved.getEndTime(),
-            saved.getEstimatedCost(),
-            saved.getOrderIndex(),
-            saved.getVersion()
-    );
+    ActivityResponse response = toResponse(saved);
+
+    publish(trip, "ACTIVITY_CREATED", day.getId(), saved.getId(), currentUser, response);
+
+    return response;
 }
 @Transactional
 public ActivityResponse updateActivity(
@@ -362,13 +436,14 @@ public ActivityResponse updateActivity(
             currentUser
     );
 
-    if (!activity.getVersion()
-            .equals(request.version())) {
+    checkVersion(activity, request.version());
 
-        throw new IllegalStateException(
-                "Activity was modified by another user"
-        );
-    }
+    validateActivityFields(
+            request.title(),
+            request.startTime(),
+            request.endTime(),
+            request.estimatedCost()
+    );
 
     activity.setTitle(
             request.title()
@@ -394,27 +469,114 @@ public ActivityResponse updateActivity(
     activity.setEstimatedCost(
             request.estimatedCost()
     );
-    activity.setOrderIndex(
-            request.orderIndex()
+
+    // Flush so the @Version bump (and any concurrent-write conflict) happens
+    // here, and the response/broadcast carry the new version.
+    Activity saved =
+            activityRepo.saveAndFlush(activity);
+
+    ActivityResponse response = toResponse(saved);
+
+    publish(trip, "ACTIVITY_UPDATED", saved.getItineraryDay().getId(), saved.getId(), currentUser, response);
+
+    return response;
+}
+@Transactional
+public ActivityResponse moveActivity(
+        UUID activityId,
+        MoveActivityRequest request
+) {
+
+    User currentUser =
+            currentUserService.getCurrentUser();
+
+    Activity activity =
+            activityRepo.findById(activityId)
+                    .orElseThrow(() ->
+                            new ResourceNotFoundException(
+                                    "Activity not found"
+                            )
+                    );
+
+    Trip trip = activity
+            .getItineraryDay()
+            .getTrip();
+
+    validateTripAdminAccess(
+            trip,
+            currentUser
     );
-    
+
+    checkVersion(activity, request.version());
+
+    ItineraryDay targetDay = activity.getItineraryDay();
+    if (request.targetDayId() != null
+            && !request.targetDayId().equals(targetDay.getId())) {
+        targetDay = itineraryDayRepo.findById(request.targetDayId())
+                .orElseThrow(() ->
+                        new ResourceNotFoundException(
+                                "Itinerary day not found"
+                        )
+                );
+        if (!targetDay.getTrip().getId().equals(trip.getId())) {
+            throw new BadRequestException(
+                    "Target day belongs to another trip"
+            );
+        }
+    }
+
+    // Find the two neighbours in the target day and take a rank between them.
+    String before;
+    String after;
+    if (request.afterActivityId() == null) {
+        before = null;
+        after = activityRepo.findFirstByItineraryDayOrderByOrderIndexAsc(targetDay)
+                .filter(first -> !first.getId().equals(activity.getId()))
+                .map(Activity::getOrderIndex)
+                .orElse(null);
+    } else {
+        if (request.afterActivityId().equals(activity.getId())) {
+            throw new BadRequestException(
+                    "An activity cannot be placed after itself"
+            );
+        }
+        Activity anchor = activityRepo.findById(request.afterActivityId())
+                .orElseThrow(() ->
+                        new ResourceNotFoundException(
+                                "Anchor activity not found"
+                        )
+                );
+        if (!anchor.getItineraryDay().getId().equals(targetDay.getId())) {
+            throw new BadRequestException(
+                    "Anchor activity is not in the target day"
+            );
+        }
+        before = anchor.getOrderIndex();
+        after = activityRepo
+                .findFirstByItineraryDayAndOrderIndexGreaterThanAndIdNotOrderByOrderIndexAsc(
+                        targetDay, before, activity.getId()
+                )
+                .map(Activity::getOrderIndex)
+                .orElse(null);
+    }
+
+    // Two activities created at the same moment can share a rank; if the
+    // neighbours collide, just place it after the anchor's group.
+    if (before != null && after != null && before.compareTo(after) >= 0) {
+        after = null;
+    }
+
+    activity.setItineraryDay(targetDay);
+    activity.setOrderIndex(LexoRank.between(before, after));
 
     Activity saved =
-            activityRepo.save(activity);
+            activityRepo.saveAndFlush(activity);
 
-    return new ActivityResponse(
-            saved.getId(),
-            saved.getTitle(),
-            saved.getDescription(),
-            saved.getLocation(),
-            saved.getLatitude(),
-            saved.getLongitude(),
-            saved.getStartTime(),
-            saved.getEndTime(),
-            saved.getEstimatedCost(),
-            saved.getOrderIndex(),
-            saved.getVersion()
-    );
+    ActivityResponse response = toResponse(saved);
+
+    publish(trip, "ACTIVITY_MOVED", targetDay.getId(), saved.getId(), currentUser, response);
+
+    return response;
 }
 @Transactional
 public void deleteActivity(
@@ -441,8 +603,13 @@ public void deleteActivity(
             currentUser
     );
 
+    UUID dayId = activity.getItineraryDay().getId();
+
     activityRepo.delete(activity);
+
+    publish(trip, "ACTIVITY_DELETED", dayId, activityId, currentUser, null);
 }
+@Transactional
 public ItineraryResponse getItinerary(
         UUID tripId
 ) {
@@ -490,7 +657,8 @@ public ItineraryResponse getItinerary(
                                                         activity.getStartTime(),
                                                         activity.getEndTime(),
                                                         activity.getEstimatedCost(),
-                                                        activity.getOrderIndex()
+                                                        activity.getOrderIndex(),
+                                                        activity.getVersion()
                                                 )
                                         )
                                         .toList();

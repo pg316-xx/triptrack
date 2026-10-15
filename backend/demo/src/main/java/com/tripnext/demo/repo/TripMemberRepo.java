@@ -28,4 +28,8 @@ Optional<TripMember> findByTripAndUser(
         Trip trip,
         User user
 );
+boolean existsByTrip_IdAndUser_Id(
+        UUID tripId,
+        UUID userId
+);
 }

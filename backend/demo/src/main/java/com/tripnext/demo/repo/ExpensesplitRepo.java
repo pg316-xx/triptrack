@@ -14,4 +14,5 @@ public interface ExpenseSplitRepo extends JpaRepository<ExpenseSplit, UUID>{
     List<ExpenseSplit> findByExpense(Expense expense);
     void deleteByExpense(Expense expense);
     List<ExpenseSplit> findByExpenseTrip(Trip trip);
+    List<ExpenseSplit> findByExpenseIn(List<Expense> expenses);
 }

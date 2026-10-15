@@ -14,5 +14,6 @@ public record ActivitySummaryResponse(
         OffsetDateTime startTime,
         OffsetDateTime endTime,
         BigDecimal estimatedCost,
-        Integer orderIndex
+        String orderIndex,
+        Integer version
 ) {}

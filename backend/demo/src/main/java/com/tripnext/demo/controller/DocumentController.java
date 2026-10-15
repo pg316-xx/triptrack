@@ -9,16 +9,21 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
+import com.tripnext.demo.dto.document.CommitDocumentRequest;
+import com.tripnext.demo.dto.document.CommitMediaRequest;
 import com.tripnext.demo.dto.document.DocumentResponse;
 import com.tripnext.demo.dto.document.TripMediaResponse;
+import com.tripnext.demo.dto.document.UploadUrlRequest;
 import com.tripnext.demo.model.help.DocType;
 import com.tripnext.demo.model.help.MediaFileType;
 import com.tripnext.demo.service.FileService;
+import com.tripnext.demo.service.storage.PresignedUpload;
 
 import lombok.RequiredArgsConstructor;
 
@@ -27,6 +32,52 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public class DocumentController {
     private final FileService fileService;
+
+// ---- Direct-to-storage uploads: get a URL, PUT the file there, then commit ----
+@PostMapping("/documents/upload-url")
+public ResponseEntity<PresignedUpload> documentUploadUrl(
+        @PathVariable UUID tripId,
+        @RequestBody UploadUrlRequest request
+) {
+    return ResponseEntity.ok(
+            fileService.requestDocumentUpload(tripId, request)
+    );
+}
+@PostMapping(
+        value = "/documents",
+        consumes = org.springframework.http.MediaType.APPLICATION_JSON_VALUE
+)
+public ResponseEntity<DocumentResponse> commitDocument(
+        @PathVariable UUID tripId,
+        @RequestBody CommitDocumentRequest request
+) {
+    return ResponseEntity.status(201).body(
+            fileService.commitDocument(tripId, request)
+    );
+}
+@PostMapping("/media/upload-url")
+public ResponseEntity<PresignedUpload> mediaUploadUrl(
+        @PathVariable UUID tripId,
+        @RequestBody UploadUrlRequest request
+) {
+    return ResponseEntity.ok(
+            fileService.requestMediaUpload(tripId, request)
+    );
+}
+@PostMapping(
+        value = "/media",
+        consumes = org.springframework.http.MediaType.APPLICATION_JSON_VALUE
+)
+public ResponseEntity<TripMediaResponse> commitMedia(
+        @PathVariable UUID tripId,
+        @RequestBody CommitMediaRequest request
+) {
+    return ResponseEntity.status(201).body(
+            fileService.commitMedia(tripId, request)
+    );
+}
+
+// ---- Upload through the backend (multipart); kept for scripts/tools ----
 @PostMapping(
         value = "/documents",
         consumes = org.springframework.http.MediaType.MULTIPART_FORM_DATA_VALUE

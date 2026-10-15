@@ -1,0 +1,117 @@
+# Local stack: Postgres + Redis + SeaweedFS (S3-compatible) + backend + frontend.
+#   docker compose up -d --build
+# Frontend:      http://localhost:5173
+# Backend API:   http://localhost:${BACKEND_PORT:-8080}
+# S3 (SeaweedFS): http://localhost:${S3_PORT:-8333}
+name: tripnest
+
+services:
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_DB: tripnext
+      POSTGRES_USER: ${DB_USERNAME:-tripnext}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD in .env}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d tripnext"]
+      interval: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      retries: 10
+
+  # S3-compatible object storage (stands in for AWS S3 locally).
+  s3:
+    image: chrislusf/seaweedfs:4.47
+    entrypoint: ["/bin/sh", "/start.sh"]
+    environment:
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY:?set S3_ACCESS_KEY in .env}
+      S3_SECRET_KEY: ${S3_SECRET_KEY:?set S3_SECRET_KEY in .env}
+    ports:
+      - "${S3_PORT:-8333}:8333"
+    volumes:
+      - ./docker/seaweedfs/start.sh:/start.sh:ro
+      - s3data:/data
+
+  # One-off job: create the (private) buckets and allow the frontend origin to
+  # PUT/GET via pre-signed URLs (direct browser uploads need CORS), then exit.
+  s3-init:
+    image: amazon/aws-cli:2.27.0
+    depends_on:
+      - s3
+    environment:
+      AWS_ACCESS_KEY_ID: ${S3_ACCESS_KEY}
+      AWS_SECRET_ACCESS_KEY: ${S3_SECRET_KEY}
+      AWS_DEFAULT_REGION: us-east-1
+      FRONTEND_ORIGIN: http://localhost:5173
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        S3="aws --endpoint-url http://s3:8333"
+        until $$S3 s3 ls >/dev/null 2>&1; do echo "waiting for s3..."; sleep 2; done
+        CORS='{"CORSRules":[{"AllowedOrigins":["'"$$FRONTEND_ORIGIN"'"],"AllowedMethods":["PUT","GET","HEAD"],"AllowedHeaders":["*"],"ExposeHeaders":["ETag"],"MaxAgeSeconds":3000}]}'
+        for b in docs tripfiles wallet; do
+          $$S3 s3api head-bucket --bucket $$b 2>/dev/null || $$S3 s3 mb s3://$$b
+          $$S3 s3api put-bucket-cors --bucket $$b --cors-configuration "$$CORS"
+        done
+        echo "buckets ready"
+
+  backend:
+    build: ./backend/demo
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      s3-init:
+        condition: service_completed_successfully
+    environment:
+      DB_URL: jdbc:postgresql://postgres:5432/tripnext
+      DB_USERNAME: ${DB_USERNAME:-tripnext}
+      DB_PASSWORD: ${DB_PASSWORD}
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env}
+      JWT_ACCESS_TOKEN_EXPIRATION: ${JWT_ACCESS_TOKEN_EXPIRATION:-900000}
+      JWT_REFRESH_TOKEN_EXPIRATION: ${JWT_REFRESH_TOKEN_EXPIRATION:-604800000}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      S3_ENDPOINT: http://s3:8333
+      # Presigned URLs are opened by the browser, so they must use a host it can reach.
+      S3_PUBLIC_ENDPOINT: http://localhost:${S3_PORT:-8333}
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY}
+      S3_SECRET_KEY: ${S3_SECRET_KEY}
+      S3_BUCKET_DOCUMENTS: docs
+      S3_BUCKET_MEDIA: tripfiles
+      S3_BUCKET_WALLET: wallet
+      CORS_ALLOWED_ORIGINS: http://localhost:5173
+      FRONTEND_URL: http://localhost:5173
+      SPRING_JPA_SHOW_SQL: "false"
+    ports:
+      - "${BACKEND_PORT:-8080}:8080"
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_API_URL: http://localhost:${BACKEND_PORT:-8080}
+    depends_on:
+      - backend
+    # 5173 so CORS and the Google OAuth authorized origin stay the same as `npm run dev`
+    ports:
+      - "5173:80"
+
+volumes:
+  pgdata:
+  redisdata:
+  s3data:

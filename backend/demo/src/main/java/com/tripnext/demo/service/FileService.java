@@ -9,8 +9,12 @@ import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
+import com.tripnext.demo.dto.document.CommitDocumentRequest;
+import com.tripnext.demo.dto.document.CommitMediaRequest;
 import com.tripnext.demo.dto.document.DocumentResponse;
 import com.tripnext.demo.dto.document.TripMediaResponse;
+import com.tripnext.demo.dto.document.UploadUrlRequest;
+import com.tripnext.demo.exception.BadRequestException;
 import com.tripnext.demo.exception.ResourceNotFoundException;
 import com.tripnext.demo.exception.UnauthorizedException;
 import com.tripnext.demo.model.Document;
@@ -26,6 +30,10 @@ import com.tripnext.demo.repo.TripMediaRepo;
 import com.tripnext.demo.repo.TripMemberRepo;
 import com.tripnext.demo.repo.TripRepo;
 import com.tripnext.demo.service.storage.FileStorageService;
+import com.tripnext.demo.service.storage.PresignedUpload;
+import com.tripnext.demo.service.storage.StorageBucket;
+import com.tripnext.demo.service.storage.StoredObject;
+import com.tripnext.demo.util.StorageKeys;
 
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
@@ -66,8 +74,9 @@ public DocumentResponse uploadDocument(
             + "-"
             + file.getOriginalFilename();
 
-    String fileUrl =
-            fileStorageService.uploadDocument(
+    String storageKey =
+            fileStorageService.upload(
+                    StorageBucket.DOCUMENTS,
                     file,
                     path
             );
@@ -77,7 +86,7 @@ public DocumentResponse uploadDocument(
                     trip,
                     currentUser,
                     file.getOriginalFilename(),
-                    fileUrl,
+                    storageKey,
                     documentType,
                     file.getSize()
             );
@@ -88,7 +97,7 @@ public DocumentResponse uploadDocument(
     return new DocumentResponse(
             saved.getId(),
             saved.getFileName(),
-            saved.getFileUrl(),
+            fileStorageService.getDownloadUrl(StorageBucket.DOCUMENTS, saved.getStorageKey()),
             saved.getDocumentType(),
             saved.getFileSizeBytes(),
             saved.getCreatedAt()
@@ -122,8 +131,9 @@ public TripMediaResponse uploadMedia(
             + "-"
             + file.getOriginalFilename();
 
-    String fileUrl =
-            fileStorageService.uploadMedia(
+    String storageKey =
+            fileStorageService.upload(
+                    StorageBucket.MEDIA,
                     file,
                     path
             );
@@ -132,7 +142,7 @@ public TripMediaResponse uploadMedia(
             new TripMedia(
                     trip,
                     currentUser,
-                    fileUrl,
+                    storageKey,
                     mediaFileType,
                     caption
             );
@@ -142,13 +152,14 @@ public TripMediaResponse uploadMedia(
 
     return new TripMediaResponse(
             saved.getId(),
-            saved.getFileUrl(),
+            fileStorageService.getDownloadUrl(StorageBucket.MEDIA, saved.getStorageKey()),
             saved.getMediaFileType(),
             saved.getCaption(),
             saved.getCreatedAt()
     );
 }
-    @Cacheable(value = "tripDocuments", key = "#tripId")
+    // Not cached: cache hits skipped the membership check and records with OffsetDateTime don't round-trip through the Redis JSON serializer.
+@Transactional
 public List<DocumentResponse> getDocuments(
         UUID tripId
 ) {
@@ -164,14 +175,15 @@ public List<DocumentResponse> getDocuments(
             .map(document -> new DocumentResponse(
                     document.getId(),
                     document.getFileName(),
-                    document.getFileUrl(),
+                    fileStorageService.getDownloadUrl(StorageBucket.DOCUMENTS, document.getStorageKey()),
                     document.getDocumentType(),
                     document.getFileSizeBytes(),
                     document.getCreatedAt()
             ))
             .toList();
 }
-    @Cacheable(value = "tripMedia", key = "#tripId")
+    // Not cached: cache hits skipped the membership check and records with OffsetDateTime don't round-trip through the Redis JSON serializer.
+@Transactional
 public List<TripMediaResponse> getMedia(
         UUID tripId
 ) {
@@ -186,7 +198,7 @@ public List<TripMediaResponse> getMedia(
             .stream()
             .map(media -> new TripMediaResponse(
                     media.getId(),
-                    media.getFileUrl(),
+                    fileStorageService.getDownloadUrl(StorageBucket.MEDIA, media.getStorageKey()),
                     media.getMediaFileType(),
                     media.getCaption(),
                     media.getCreatedAt()
@@ -209,8 +221,9 @@ public void deleteDocument(
     
     Trip trip = document.getTrip();
 validateCanManageFiles(trip);
-    fileStorageService.deleteFile(
-            document.getFileUrl()
+    fileStorageService.delete(
+            StorageBucket.DOCUMENTS,
+            document.getStorageKey()
     );
 
     documentRepo.delete(document);
@@ -238,8 +251,9 @@ public void deleteMedia(
                     );
     Trip trip = media.getTrip();
    validateCanManageFiles(trip);
-    fileStorageService.deleteFile(
-            media.getFileUrl()
+    fileStorageService.delete(
+            StorageBucket.MEDIA,
+            media.getStorageKey()
     );
 
     tripMediaRepo.delete(media);
@@ -302,6 +316,7 @@ private void validateCanManageFiles(
         );
     }
 }
+@Transactional
 public DocumentResponse getDocument(
         UUID documentId
 ) {
@@ -313,15 +328,20 @@ public DocumentResponse getDocument(
                             )
                     );
 
+    getTripAndValidateMembership(
+            document.getTrip().getId()
+    );
+
     return new DocumentResponse(
             document.getId(),
             document.getFileName(),
-            document.getFileUrl(),
+            fileStorageService.getDownloadUrl(StorageBucket.DOCUMENTS, document.getStorageKey()),
             document.getDocumentType(),
             document.getFileSizeBytes(),
             document.getCreatedAt()
     );
 }
+@Transactional
 public TripMediaResponse getMediaById(
         UUID mediaId
 ) {
@@ -333,12 +353,169 @@ public TripMediaResponse getMediaById(
                             )
                     );
 
+    getTripAndValidateMembership(
+            media.getTrip().getId()
+    );
+
     return new TripMediaResponse(
             media.getId(),
-            media.getFileUrl(),
+            fileStorageService.getDownloadUrl(StorageBucket.MEDIA, media.getStorageKey()),
             media.getMediaFileType(),
             media.getCaption(),
             media.getCreatedAt()
     );
 }
+
+    // ---- Two-phase direct upload (SRS 11.4) ----
+    // 1. Client asks for a pre-signed PUT URL (we check membership + type/size).
+    // 2. Client PUTs the file straight to storage.
+    // 3. Client commits; we confirm the object really exists and re-check the
+    //    size/type storage reports before saving any metadata.
+
+    public PresignedUpload requestDocumentUpload(
+            UUID tripId,
+            UploadUrlRequest request
+    ) {
+        getTripAndValidateMembership(tripId);
+        fileValidator.validateDocument(request.contentType(), sizeOf(request));
+
+        return fileStorageService.presignUpload(
+                StorageBucket.DOCUMENTS,
+                StorageKeys.newKey(tripId, request.fileName()),
+                request.contentType()
+        );
+    }
+
+    public PresignedUpload requestMediaUpload(
+            UUID tripId,
+            UploadUrlRequest request
+    ) {
+        getTripAndValidateMembership(tripId);
+        fileValidator.validateMedia(request.contentType(), sizeOf(request));
+
+        return fileStorageService.presignUpload(
+                StorageBucket.MEDIA,
+                StorageKeys.newKey(tripId, request.fileName()),
+                request.contentType()
+        );
+    }
+
+    @Transactional
+    public DocumentResponse commitDocument(
+            UUID tripId,
+            CommitDocumentRequest request
+    ) {
+        User currentUser = currentUserService.getCurrentUser();
+        Trip trip = getTripAndValidateMembership(tripId);
+
+        if (request.documentType() == null) {
+            throw new BadRequestException("documentType is required");
+        }
+        checkKeyBelongsToTrip(request.storageKey(), tripId);
+        if (documentRepo.existsByStorageKey(request.storageKey())) {
+            throw new BadRequestException("This upload was already saved");
+        }
+
+        StoredObject stored = requireUploaded(StorageBucket.DOCUMENTS, request.storageKey());
+        try {
+            fileValidator.validateDocument(stored.contentType(), stored.sizeBytes());
+        } catch (BadRequestException e) {
+            // Don't keep a file that bypassed the limits we signed for.
+            fileStorageService.delete(StorageBucket.DOCUMENTS, request.storageKey());
+            throw e;
+        }
+
+        Document saved = documentRepo.save(
+                new Document(
+                        trip,
+                        currentUser,
+                        fileNameOrDefault(request.fileName(), request.storageKey()),
+                        request.storageKey(),
+                        request.documentType(),
+                        stored.sizeBytes()
+                )
+        );
+
+        return new DocumentResponse(
+                saved.getId(),
+                saved.getFileName(),
+                fileStorageService.getDownloadUrl(StorageBucket.DOCUMENTS, saved.getStorageKey()),
+                saved.getDocumentType(),
+                saved.getFileSizeBytes(),
+                saved.getCreatedAt()
+        );
+    }
+
+    @Transactional
+    public TripMediaResponse commitMedia(
+            UUID tripId,
+            CommitMediaRequest request
+    ) {
+        User currentUser = currentUserService.getCurrentUser();
+        Trip trip = getTripAndValidateMembership(tripId);
+
+        if (request.mediaFileType() == null) {
+            throw new BadRequestException("mediaFileType is required");
+        }
+        checkKeyBelongsToTrip(request.storageKey(), tripId);
+        if (tripMediaRepo.existsByStorageKey(request.storageKey())) {
+            throw new BadRequestException("This upload was already saved");
+        }
+
+        StoredObject stored = requireUploaded(StorageBucket.MEDIA, request.storageKey());
+        try {
+            fileValidator.validateMedia(stored.contentType(), stored.sizeBytes());
+        } catch (BadRequestException e) {
+            fileStorageService.delete(StorageBucket.MEDIA, request.storageKey());
+            throw e;
+        }
+
+        TripMedia saved = tripMediaRepo.save(
+                new TripMedia(
+                        trip,
+                        currentUser,
+                        request.storageKey(),
+                        request.mediaFileType(),
+                        request.caption()
+                )
+        );
+
+        return new TripMediaResponse(
+                saved.getId(),
+                fileStorageService.getDownloadUrl(StorageBucket.MEDIA, saved.getStorageKey()),
+                saved.getMediaFileType(),
+                saved.getCaption(),
+                saved.getCreatedAt()
+        );
+    }
+
+    private long sizeOf(UploadUrlRequest request) {
+        if (request.sizeBytes() == null) {
+            throw new BadRequestException("sizeBytes is required");
+        }
+        return request.sizeBytes();
+    }
+
+    // Keys are issued as "{tripId}/..."; refuse keys for another trip's files.
+    private void checkKeyBelongsToTrip(String storageKey, UUID tripId) {
+        if (storageKey == null
+                || !storageKey.startsWith(tripId + "/")
+                || storageKey.contains("..")) {
+            throw new BadRequestException("Invalid storageKey for this trip");
+        }
+    }
+
+    private StoredObject requireUploaded(StorageBucket bucket, String storageKey) {
+        return fileStorageService.find(bucket, storageKey)
+                .orElseThrow(() -> new BadRequestException(
+                        "File not found in storage; upload it to the pre-signed URL first"
+                ));
+    }
+
+    private String fileNameOrDefault(String fileName, String storageKey) {
+        if (fileName != null && !fileName.isBlank()) {
+            return fileName.length() > 200 ? fileName.substring(0, 200) : fileName;
+        }
+        return storageKey.substring(storageKey.lastIndexOf('/') + 1);
+    }
 }

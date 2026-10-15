@@ -102,13 +102,16 @@ getBalances(
 public ResponseEntity<SettlementResponse>
 createSettlement(
         @PathVariable UUID tripId,
-        @RequestBody CreateSettlementRequest request
+        @RequestBody CreateSettlementRequest request,
+        @RequestHeader("Idempotency-Key")
+        String idempotencyKey
 ) {
 
     SettlementResponse response =
             expenseService.createSettlement(
                     tripId,
-                    request
+                    request,
+                    idempotencyKey
             );
 
     return ResponseEntity.status(201)

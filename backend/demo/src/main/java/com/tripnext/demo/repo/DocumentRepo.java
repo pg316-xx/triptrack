@@ -17,4 +17,5 @@ public interface DocumentRepo extends JpaRepository<Document, UUID> {
         UUID id,
         Trip trip
 );
+    boolean existsByStorageKey(String storageKey);
 }

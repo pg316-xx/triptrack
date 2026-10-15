@@ -8,6 +8,7 @@ import com.tripnext.demo.dto.itinerary.CreateActivityRequest;
 import com.tripnext.demo.dto.itinerary.CreateItineraryDayRequest;
 import com.tripnext.demo.dto.itinerary.ItineraryDayResponse;
 import com.tripnext.demo.dto.itinerary.ItineraryResponse;
+import com.tripnext.demo.dto.itinerary.MoveActivityRequest;
 import com.tripnext.demo.dto.itinerary.UpdateActivityRequest;
 import com.tripnext.demo.dto.itinerary.UpdateItineraryDayRequest;
 import com.tripnext.demo.service.ItineraryDayService;
@@ -103,7 +104,7 @@ public ResponseEntity<ActivityResponse> createActivity(
     return ResponseEntity.status(201)
             .body(response);
 }
-@PatchMapping("/api/activities/{activityId}")
+@PatchMapping("/activities/{activityId}")
 public ResponseEntity<ActivityResponse> updateActivity(
         @PathVariable UUID activityId,
         @RequestBody UpdateActivityRequest request
@@ -115,7 +116,19 @@ public ResponseEntity<ActivityResponse> updateActivity(
             )
     );
 }
-@DeleteMapping("/api/activities/{activityId}")
+@PatchMapping("/activities/{activityId}/move")
+public ResponseEntity<ActivityResponse> moveActivity(
+        @PathVariable UUID activityId,
+        @RequestBody MoveActivityRequest request
+) {
+    return ResponseEntity.ok(
+            itineraryDayService.moveActivity(
+                    activityId,
+                    request
+            )
+    );
+}
+@DeleteMapping("/activities/{activityId}")
 public ResponseEntity<Void> deleteActivity(
         @PathVariable UUID activityId
 ) {

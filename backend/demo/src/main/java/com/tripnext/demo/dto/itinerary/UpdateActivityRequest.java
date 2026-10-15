@@ -12,6 +12,5 @@ public record UpdateActivityRequest(
         OffsetDateTime startTime,
         OffsetDateTime endTime,
         BigDecimal estimatedCost,
-        Integer orderIndex,
         Integer version
 ) {}

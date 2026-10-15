@@ -1,9 +1,11 @@
 package com.tripnext.demo.service;
 
+import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 
 import com.tripnext.demo.exception.ResourceNotFoundException;
+import com.tripnext.demo.exception.UnauthorizedException;
 import com.tripnext.demo.model.User;
 import com.tripnext.demo.repo.UserRepo;
 
@@ -17,10 +19,7 @@ public class CurrentUserService {
 
     public User getCurrentUser() {
 
-        String email = SecurityContextHolder
-                .getContext()
-                .getAuthentication()
-                .getName();
+        String email = getCurrentUserEmail();
 
         return userRepo.findByEmail(email)
                 .orElseThrow(() ->
@@ -31,9 +30,17 @@ public class CurrentUserService {
     }
 
     public String getCurrentUserEmail() {
-        return SecurityContextHolder
-                .getContext()
-                .getAuthentication()
-                .getName();
+        Authentication authentication =
+                SecurityContextHolder
+                        .getContext()
+                        .getAuthentication();
+
+        if (authentication == null) {
+            throw new UnauthorizedException(
+                    "User is not authenticated"
+            );
+        }
+
+        return authentication.getName();
     }
 }

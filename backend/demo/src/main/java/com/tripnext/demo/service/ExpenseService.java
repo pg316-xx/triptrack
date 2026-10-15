@@ -5,11 +5,13 @@ import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -21,25 +23,28 @@ import com.tripnext.demo.dto.expense.BalanceResponse;
 import com.tripnext.demo.dto.expense.CreateExpenseRequest;
 import com.tripnext.demo.dto.expense.CreateSettlementRequest;
 import com.tripnext.demo.dto.expense.ExpenseResponse;
+import com.tripnext.demo.dto.expense.ExpenseSplitRequest;
+import com.tripnext.demo.dto.expense.ExpenseSplitResponse;
 import com.tripnext.demo.dto.expense.SettlementResponse;
 import com.tripnext.demo.dto.expense.SettlementSuggestionResponse;
 import com.tripnext.demo.dto.expense.UpdateExpenseRequest;
+import com.tripnext.demo.exception.BadRequestException;
+import com.tripnext.demo.exception.ConflictException;
 import com.tripnext.demo.exception.ResourceNotFoundException;
 import com.tripnext.demo.exception.UnauthorizedException;
 import com.tripnext.demo.model.Expense;
 import com.tripnext.demo.model.help.NotificationType;
 import com.tripnext.demo.model.ExpenseSplit;
-import com.tripnext.demo.model.IdempotencyKey;
 import com.tripnext.demo.model.Settlement;
 import com.tripnext.demo.model.Trip;
 import com.tripnext.demo.model.User;
 import com.tripnext.demo.repo.ExpenseRepo;
 import com.tripnext.demo.repo.ExpenseSplitRepo;
-import com.tripnext.demo.repo.IdempotencyKeyRepo;
 import com.tripnext.demo.repo.SettlementRepo;
 import com.tripnext.demo.repo.TripMemberRepo;
 import com.tripnext.demo.repo.TripRepo;
 import com.tripnext.demo.repo.UserRepo;
+import com.tripnext.demo.util.SplitCalculator;
 
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
@@ -54,9 +59,10 @@ public class ExpenseService {
     private final UserRepo userRepo;
     private final CurrentUserService currentUserService;
     private final SettlementRepo settlementRepo;
-    private final IdempotencyKeyRepo idempotencyKeyRepo;
+    private final IdempotencyService idempotencyService;
     private final NotificationService notificationService;
     private final AuditLogService auditLogService;
+
     @Transactional
     @CacheEvict(value = "tripExpenses", key = "#tripId")
 public ExpenseResponse createExpense(
@@ -64,31 +70,27 @@ public ExpenseResponse createExpense(
         CreateExpenseRequest request,
         String idempotencyKey
 ) {
-   Optional<IdempotencyKey> existingKey =
-        idempotencyKeyRepo.findByKey(
-                idempotencyKey
-        );
 
-if (existingKey.isPresent()) {
-
-    Expense existingExpense =
-            expenseRepo.findById(
-                    existingKey.get()
-                            .getResourceId()
-            ).orElseThrow();
-
-    return new ExpenseResponse(
-            existingExpense.getId(),
-            existingExpense.getTitle(),
-            existingExpense.getDescription(),
-            existingExpense.getCategory(),
-            existingExpense.getAmount(),
-            existingExpense.getPaidBy().getId(),
-            existingExpense.getCreatedAt()
-    );
-}
     User currentUser =
             currentUserService.getCurrentUser();
+
+    // A retried request with the same key returns the expense created the
+    // first time instead of logging it twice.
+    return idempotencyService.execute(
+            "expense",
+            currentUser.getId(),
+            idempotencyKey,
+            () -> doCreateExpense(tripId, request, currentUser),
+            ExpenseResponse::id,
+            this::replayExpense
+    );
+}
+
+private ExpenseResponse doCreateExpense(
+        UUID tripId,
+        CreateExpenseRequest request,
+        User currentUser
+) {
 
     Trip trip = tripRepo.findById(tripId)
             .orElseThrow(() ->
@@ -97,108 +99,35 @@ if (existingKey.isPresent()) {
                     )
             );
 
-    boolean isMember =
-            tripMemberRepo.existsByTripAndUser(
-                    trip,
-                    currentUser
-            );
-
-    if (!isMember) {
+    if (!tripMemberRepo.existsByTripAndUser(trip, currentUser)) {
         throw new UnauthorizedException(
                 "You are not a member of this trip"
         );
     }
 
-    if (request.participantIds().isEmpty()) {
-        throw new IllegalArgumentException(
-                "At least one participant required"
-        );
-    }
+    validateExpenseFields(request.title(), request.amount());
 
-    Set<UUID> uniqueParticipants =
-            new HashSet<>(request.participantIds());
-
-    if (uniqueParticipants.size()
-            != request.participantIds().size()) {
-
-        throw new IllegalArgumentException(
-                "Duplicate participants are not allowed"
-        );
-    }
-    if (request.amount() == null
-        || request.amount().compareTo(BigDecimal.ZERO) <= 0) {
-
-    throw new IllegalArgumentException(
-            "Amount must be greater than zero"
-    );
-}
-    if (request.title() == null
-        || request.title().isBlank()) {
-
-    throw new IllegalArgumentException(
-            "Title is required"
-    );
-}
-
-    Expense expense = new Expense(
+    Map<User, BigDecimal> shares = resolveShares(
             trip,
-            currentUser,
             request.amount(),
-            request.title(),
-            request.description(),
-            request.category()
+            request.participantIds(),
+            request.splits()
     );
 
-    Expense savedExpense =
-            expenseRepo.save(expense);
-    idempotencyKeyRepo.save(
-        new IdempotencyKey(
-                idempotencyKey,
-                savedExpense.getId(),
-                "EXPENSE"
-        )
-);
-    BigDecimal splitAmount =
-            request.amount().divide(
-                    BigDecimal.valueOf(
-                            request.participantIds().size()
-                    ),
-                    2,
-                    RoundingMode.HALF_UP
-            );
+    Expense savedExpense = expenseRepo.save(
+            new Expense(
+                    trip,
+                    currentUser,
+                    request.amount(),
+                    request.title(),
+                    request.description(),
+                    request.category()
+            )
+    );
 
-    for (UUID participantId :
-            request.participantIds()) {
+    List<ExpenseSplit> splits = saveSplits(savedExpense, shares);
 
-        User participant =
-                userRepo.findById(participantId)
-                        .orElseThrow(() ->
-                                new ResourceNotFoundException(
-                                        "User not found"
-                                )
-                        );
-
-        boolean participantIsMember =
-                tripMemberRepo.existsByTripAndUser(
-                        trip,
-                        participant
-                );
-
-        if (!participantIsMember) {
-            throw new IllegalArgumentException(
-                    "Participant is not a trip member"
-            );
-        }
-
-        ExpenseSplit split =
-                new ExpenseSplit(
-                        savedExpense,
-                        participant,
-                        splitAmount
-                );
-
-        expenseSplitRepo.save(split);
-
+    for (User participant : shares.keySet()) {
         if (!participant.getId().equals(currentUser.getId())) {
             notificationService.createNotification(
                     participant,
@@ -211,17 +140,22 @@ if (existingKey.isPresent()) {
         }
     }
 
-    return new ExpenseResponse(
-            savedExpense.getId(),
-            savedExpense.getTitle(),
-            savedExpense.getDescription(),
-            savedExpense.getCategory(),
-            savedExpense.getAmount(),
-            savedExpense.getPaidBy().getId(),
-            savedExpense.getCreatedAt()
-    );
+    return toResponse(savedExpense, splits);
 }
-    @Cacheable(value = "tripExpenses", key = "#tripId")
+
+private ExpenseResponse replayExpense(UUID expenseId) {
+    Expense expense = expenseRepo.findById(expenseId)
+            .orElseThrow(() ->
+                    new ConflictException(
+                            "This Idempotency-Key was already used for an expense that no longer exists"
+                    )
+            );
+    return toResponse(expense, expenseSplitRepo.findByExpense(expense));
+}
+
+    // Not cached: key ignored the Pageable and skipped the membership check on cache hits,
+    // and Page<record> does not round-trip through the Redis JSON serializer.
+@Transactional
 public Page<ExpenseResponse> getExpenses(
         UUID tripId,
         Pageable pageable
@@ -246,20 +180,22 @@ public Page<ExpenseResponse> getExpenses(
         );
     }
 
-    return expenseRepo
-        .findByTripOrderByCreatedAtDesc(
-                trip,
-                pageable
-        )
-        .map(expense -> new ExpenseResponse(
-                expense.getId(),
-                expense.getTitle(),
-                expense.getDescription(),
-                expense.getCategory(),
-                expense.getAmount(),
-                expense.getPaidBy().getId(),
-                expense.getCreatedAt()
-        ));
+    Page<Expense> page = expenseRepo.findByTripOrderByCreatedAtDesc(
+            trip,
+            pageable
+    );
+
+    // One query for all splits on this page instead of one per expense.
+    Map<UUID, List<ExpenseSplit>> splitsByExpense = page.isEmpty()
+            ? Map.of()
+            : expenseSplitRepo.findByExpenseIn(page.getContent())
+                    .stream()
+                    .collect(Collectors.groupingBy(s -> s.getExpense().getId()));
+
+    return page.map(expense -> toResponse(
+            expense,
+            splitsByExpense.getOrDefault(expense.getId(), List.of())
+    ));
 }
     @Transactional
     @CacheEvict(value = "tripExpenses", allEntries = true)
@@ -287,6 +223,32 @@ public ExpenseResponse updateExpense(
         );
     }
 
+    validateExpenseFields(request.title(), request.amount());
+
+    boolean newSplitsGiven = notEmpty(request.participantIds()) || notEmpty(request.splits());
+    boolean amountChanged = expense.getAmount().compareTo(request.amount()) != 0;
+
+    List<ExpenseSplit> splits = expenseSplitRepo.findByExpense(expense);
+
+    if (newSplitsGiven || amountChanged) {
+        // Re-split: either as requested, or equally among the current
+        // participants, so the splits keep adding up to the new amount.
+        List<UUID> participantIds = newSplitsGiven
+                ? request.participantIds()
+                : splits.stream().map(s -> s.getUser().getId()).toList();
+
+        Map<User, BigDecimal> shares = resolveShares(
+                expense.getTrip(),
+                request.amount(),
+                participantIds,
+                newSplitsGiven ? request.splits() : null
+        );
+
+        expenseSplitRepo.deleteByExpense(expense);
+        expenseSplitRepo.flush();
+        splits = saveSplits(expense, shares);
+    }
+
     expense.setTitle(request.title());
     expense.setDescription(request.description());
     expense.setCategory(request.category());
@@ -303,15 +265,133 @@ public ExpenseResponse updateExpense(
             "Expense details updated"
     );
 
-    return new ExpenseResponse(
-            saved.getId(),
-            saved.getTitle(),
-            saved.getDescription(),
-            saved.getCategory(),
-            saved.getAmount(),
-            saved.getPaidBy().getId(),
-            saved.getCreatedAt()
+    return toResponse(saved, splits);
+}
+
+private void validateExpenseFields(String title, BigDecimal amount) {
+    if (title == null || title.isBlank()) {
+        throw new BadRequestException(
+                "Title is required"
+        );
+    }
+    if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
+        throw new BadRequestException(
+                "Amount must be greater than zero"
+        );
+    }
+    if (!SplitCalculator.hasValidScale(amount)) {
+        throw new BadRequestException(
+                "Amount can have at most 2 decimal places"
+        );
+    }
+}
+
+/**
+ * Works out who owes what. Exactly one of participantIds (equal split) or
+ * splits (custom amounts) must be given; custom amounts must add up to the
+ * total exactly (SRS FR-EXP-003). Every participant must be a trip member.
+ */
+private Map<User, BigDecimal> resolveShares(
+        Trip trip,
+        BigDecimal amount,
+        List<UUID> participantIds,
+        List<ExpenseSplitRequest> customSplits
+) {
+    boolean equal = notEmpty(participantIds);
+    boolean custom = notEmpty(customSplits);
+
+    if (equal == custom) {
+        throw new BadRequestException(
+                "Send either participantIds (equal split) or splits (custom amounts)"
+        );
+    }
+
+    List<UUID> userIds = equal
+            ? participantIds
+            : customSplits.stream().map(ExpenseSplitRequest::userId).toList();
+
+    if (userIds.contains(null)) {
+        throw new BadRequestException("Participant id is required");
+    }
+    if (new HashSet<>(userIds).size() != userIds.size()) {
+        throw new BadRequestException(
+                "Duplicate participants are not allowed"
+        );
+    }
+
+    List<BigDecimal> amounts;
+    if (equal) {
+        amounts = SplitCalculator.equalSplit(amount, userIds.size());
+    } else {
+        amounts = customSplits.stream().map(ExpenseSplitRequest::amount).toList();
+        for (BigDecimal share : amounts) {
+            if (share == null || share.compareTo(BigDecimal.ZERO) <= 0) {
+                throw new BadRequestException(
+                        "Each split amount must be greater than zero"
+                );
+            }
+            if (!SplitCalculator.hasValidScale(share)) {
+                throw new BadRequestException(
+                        "Split amounts can have at most 2 decimal places"
+                );
+            }
+        }
+        BigDecimal sum = SplitCalculator.sum(amounts);
+        if (sum.compareTo(amount) != 0) {
+            throw new BadRequestException(
+                    "INVALID_SPLIT_SUM: splits add up to " + sum
+                    + " but the expense amount is " + amount.setScale(2)
+            );
+        }
+    }
+
+    Map<User, BigDecimal> shares = new LinkedHashMap<>();
+    for (int i = 0; i < userIds.size(); i++) {
+        User participant = userRepo.findById(userIds.get(i))
+                .orElseThrow(() ->
+                        new ResourceNotFoundException(
+                                "User not found"
+                        )
+                );
+        if (!tripMemberRepo.existsByTripAndUser(trip, participant)) {
+            throw new BadRequestException(
+                    "Participant is not a trip member"
+            );
+        }
+        shares.put(participant, amounts.get(i));
+    }
+    return shares;
+}
+
+private List<ExpenseSplit> saveSplits(Expense expense, Map<User, BigDecimal> shares) {
+    List<ExpenseSplit> splits = new ArrayList<>();
+    shares.forEach((user, share) ->
+            splits.add(expenseSplitRepo.save(new ExpenseSplit(expense, user, share)))
     );
+    return splits;
+}
+
+private ExpenseResponse toResponse(Expense expense, List<ExpenseSplit> splits) {
+    return new ExpenseResponse(
+            expense.getId(),
+            expense.getTitle(),
+            expense.getDescription(),
+            expense.getCategory(),
+            expense.getAmount(),
+            expense.getPaidBy().getId(),
+            expense.getCreatedAt(),
+            splits.stream()
+                    .map(s -> new ExpenseSplitResponse(
+                            s.getUser().getId(),
+                            s.getUser().getName(),
+                            s.getSplitAmount()
+                    ))
+                    .toList()
+    );
+}
+
+private static boolean notEmpty(List<?> list) {
+    return list != null && !list.isEmpty();
 }
     @Transactional
     @CacheEvict(value = "tripExpenses", allEntries = true)
@@ -349,6 +429,7 @@ public void deleteExpense(
             "Deleted expense: " + expense.getTitle()
     );
 }
+@Transactional
  public List<BalanceResponse> getBalances(
         UUID tripId
 ) {
@@ -472,11 +553,28 @@ public void deleteExpense(
 @Transactional
 public SettlementResponse createSettlement(
         UUID tripId,
-        CreateSettlementRequest request
+        CreateSettlementRequest request,
+        String idempotencyKey
 ) {
 
     User currentUser =
             currentUserService.getCurrentUser();
+
+    return idempotencyService.execute(
+            "settlement",
+            currentUser.getId(),
+            idempotencyKey,
+            () -> doCreateSettlement(tripId, request, currentUser),
+            SettlementResponse::id,
+            this::replaySettlement
+    );
+}
+
+private SettlementResponse doCreateSettlement(
+        UUID tripId,
+        CreateSettlementRequest request,
+        User currentUser
+) {
 
     Trip trip = tripRepo.findById(tripId)
             .orElseThrow(() ->
@@ -495,6 +593,17 @@ public SettlementResponse createSettlement(
         );
     }
 
+    if (request.paidToUserId() == null) {
+        throw new BadRequestException("paidToUserId is required");
+    }
+    if (request.amount() == null
+            || request.amount().compareTo(BigDecimal.ZERO) <= 0
+            || !SplitCalculator.hasValidScale(request.amount())) {
+        throw new BadRequestException(
+                "Amount must be greater than zero with at most 2 decimal places"
+        );
+    }
+
     User paidTo =
             userRepo.findById(
                     request.paidToUserId()
@@ -510,7 +619,7 @@ public SettlementResponse createSettlement(
             paidTo
     )) {
 
-        throw new IllegalArgumentException(
+        throw new BadRequestException(
                 "Target user is not a trip member"
         );
     }
@@ -519,24 +628,35 @@ public SettlementResponse createSettlement(
             paidTo.getId()
     )) {
 
-        throw new IllegalArgumentException(
+        throw new BadRequestException(
                 "Cannot settle with yourself"
         );
     }
 
-    Settlement settlement =
-            new Settlement(
-                    trip,
-                    currentUser,
-                    paidTo,
-                    request.amount()
-            );
-
     Settlement saved =
             settlementRepo.save(
-                    settlement
+                    new Settlement(
+                            trip,
+                            currentUser,
+                            paidTo,
+                            request.amount()
+                    )
             );
 
+    return toSettlementResponse(saved);
+}
+
+private SettlementResponse replaySettlement(UUID settlementId) {
+    return settlementRepo.findById(settlementId)
+            .map(this::toSettlementResponse)
+            .orElseThrow(() ->
+                    new ConflictException(
+                            "This Idempotency-Key was already used"
+                    )
+            );
+}
+
+private SettlementResponse toSettlementResponse(Settlement saved) {
     return new SettlementResponse(
             saved.getId(),
             saved.getPaidBy().getId(),
@@ -545,6 +665,7 @@ public SettlementResponse createSettlement(
             saved.getCreatedAt()
     );
 }
+@Transactional
 public List<SettlementResponse> getSettlements(
         UUID tripId
 ) {
@@ -585,6 +706,7 @@ public List<SettlementResponse> getSettlements(
             )
             .toList();
 }
+@Transactional
 public List<SettlementSuggestionResponse>
 getSettlementSuggestions(UUID tripId) {
 

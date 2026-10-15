@@ -50,11 +50,11 @@ public class TripMedia {
     private User uploadedBy;
 
     @Column(
-            name = "file_url",
+            name = "storage_key",
             nullable = false,
             length = 1000
     )
-    private String fileUrl;
+    private String storageKey;
 
     @Enumerated(EnumType.STRING)
     @Column(
@@ -75,13 +75,13 @@ public class TripMedia {
     public TripMedia(
             Trip trip,
             User uploadedBy,
-            String fileUrl,
+            String storageKey,
             MediaFileType mediaFileType,
             String caption
     ) {
         this.trip = trip;
         this.uploadedBy = uploadedBy;
-        this.fileUrl = fileUrl;
+        this.storageKey = storageKey;
         this.mediaFileType = mediaFileType;
         this.caption = caption;
     }

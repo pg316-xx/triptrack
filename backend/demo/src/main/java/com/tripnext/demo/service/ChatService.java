@@ -60,6 +60,7 @@ public class ChatService {
         return map(saved);
     }
 
+@Transactional
     public List<ChatMessageResponse> getMessages(
             UUID tripId
     ) {
@@ -78,6 +79,7 @@ public class ChatService {
                 .toList();
     }
 
+@Transactional
     public Page<ChatMessageResponse> getMessages(
             UUID tripId,
             Pageable pageable

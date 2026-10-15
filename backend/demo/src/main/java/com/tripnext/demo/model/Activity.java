@@ -43,13 +43,13 @@ public class Activity {
     private String title;
     @Column(length = 1000)
     private String description;
-    @Column(nullable = false, length = 200)
+    @Column(length = 200)
     private String location;
-    @Column(nullable = false)
+    @Column
     private OffsetDateTime startTime;
-    @Column(nullable = false)
+    @Column
     private OffsetDateTime endTime;
-    @Column(nullable = false, precision = 10, scale = 2)
+    @Column(precision = 10, scale = 2)
     private BigDecimal estimatedCost;
     @Column(nullable = false, updatable = false)
     private OffsetDateTime createdAt;
@@ -60,14 +60,14 @@ public class Activity {
 )
 private User createdBy;
 
-@Column(nullable = false)
+@Column
 private Double latitude;
 
-@Column(nullable = false)
+@Column
 private Double longitude;
 
 @Column(name = "order_index", nullable = false)
-private Integer orderIndex;
+private String orderIndex;
 
 @Version
 private Integer version;
@@ -82,7 +82,7 @@ private Integer version;
         OffsetDateTime startTime,
         OffsetDateTime endTime,
         BigDecimal estimatedCost,
-        Integer orderIndex
+        String orderIndex
 ) {
     this.itineraryDay = itineraryDay;
     this.createdBy = createdBy;
