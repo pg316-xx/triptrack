@@ -62,10 +62,18 @@ public class WebSocketAuthChannelInterceptor
 
             String token = extractToken(accessor);
 
-            if (token != null) {
+            // Only valid access tokens authenticate; anything else leaves the
+            // session anonymous, and SUBSCRIBE is then refused below.
+            String email = null;
+            try {
+                if (token != null && jwtService.isAccessToken(token)) {
+                    email = jwtService.extractEmail(token);
+                }
+            } catch (RuntimeException e) {
+                email = null;
+            }
 
-                String email =
-                        jwtService.extractEmail(token);
+            if (token != null) {
 
                 if (email != null
                         && jwtService.isTokenValid(

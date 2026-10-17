@@ -10,6 +10,10 @@ export default function MembersTab({ tripId, members, user, myRole, canManage, r
   const [newLink, setNewLink] = useState(null)
   const [role, setRole] = useState('MEMBER')
   const [limit, setLimit] = useState(5)
+  const [email, setEmail] = useState('')
+  const isOwner = myRole === 'OWNER'
+  // Owner can remove anyone but themselves; admins can remove plain members.
+  const canRemove = (m) => m.userId !== user.id && m.role !== 'OWNER' && (isOwner || (canManage && m.role === 'MEMBER'))
   const [error, setError] = useState('')
 
   const loadInvites = () => canManage && trips.invitations(tripId).then(setInvites).catch(() => {})
@@ -23,7 +27,9 @@ export default function MembersTab({ tripId, members, user, myRole, canManage, r
   const createInvite = (e) => {
     e.preventDefault()
     run(async () => {
-      setNewLink(await trips.invite(tripId, { role, usageLimit: Number(limit) }))
+      const sentTo = email.trim()
+      setNewLink({ ...(await trips.invite(tripId, { role, usageLimit: Number(limit), email: sentTo || undefined })), emailedTo: sentTo })
+      setEmail('')
       loadInvites()
     })
   }
@@ -45,7 +51,7 @@ export default function MembersTab({ tripId, members, user, myRole, canManage, r
                   </div>
                 </td>
                 <td>
-                  {canManage && m.role !== 'OWNER' && m.userId !== user.id ? (
+                  {isOwner && m.role !== 'OWNER' && m.userId !== user.id ? (
                     <select style={{ width: 'auto' }} value={m.role}
                       onChange={(e) => run(async () => { await trips.setRole(tripId, m.userId, e.target.value); reloadMembers() })}>
                       <option>ADMIN</option><option>MEMBER</option>
@@ -53,7 +59,7 @@ export default function MembersTab({ tripId, members, user, myRole, canManage, r
                   ) : <span className={`pill ${m.role === 'OWNER' ? 'warning' : ''}`}>{m.role.toLowerCase()}</span>}
                 </td>
                 <td style={{ textAlign: 'right' }}>
-                  {canManage && m.role !== 'OWNER' && m.userId !== user.id && (
+                  {canRemove(m) && (
                     <button className="danger small" onClick={() => confirm(`Remove ${m.name}?`) && run(async () => { await trips.removeMember(tripId, m.userId); reloadMembers() })}>Remove</button>
                   )}
                   {myRole === 'OWNER' && m.userId !== user.id && (
@@ -76,14 +82,15 @@ export default function MembersTab({ tripId, members, user, myRole, canManage, r
           <h3>Invite people</h3>
           <form className="inline" onSubmit={createInvite}>
             <div className="field"><label>Role</label>
-              <select value={role} onChange={(e) => setRole(e.target.value)}><option>MEMBER</option><option>ADMIN</option></select>
+              <select value={role} onChange={(e) => setRole(e.target.value)}><option>MEMBER</option>{isOwner && <option>ADMIN</option>}</select>
             </div>
-            <div className="field"><label>Max uses</label><input type="number" min="1" value={limit} onChange={(e) => setLimit(e.target.value)} /></div>
+            <div className="field"><label>Max uses</label><input type="number" min="1" max="100" value={limit} onChange={(e) => setLimit(e.target.value)} /></div>
+            <div className="field" style={{ flex: 2, minWidth: 200 }}><label>Email it to (optional)</label><input type="email" placeholder="friend@example.com" value={email} onChange={(e) => setEmail(e.target.value)} /></div>
             <button>Create link</button>
           </form>
           {newLink && (
             <div className="success" style={{ marginTop: 14 }}>
-              <strong>Share this link</strong> — it's only shown once.
+              <strong>Share this link</strong> — it's only shown once.{newLink.emailedTo && <> We also emailed it to {newLink.emailedTo}.</>}
               <div className="row" style={{ marginTop: 8, flexWrap: 'nowrap' }}>
                 <input readOnly value={newLink.inviteLink} onFocus={(e) => e.target.select()} />
                 <button type="button" className="small" onClick={() => navigator.clipboard?.writeText(newLink.inviteLink)}>Copy</button>

@@ -11,6 +11,7 @@ import ChatTab from '../components/trip/ChatTab'
 import FilesTab from '../components/trip/FilesTab'
 import MembersTab from '../components/trip/MembersTab'
 import ActivityTab from '../components/trip/ActivityTab'
+import WeatherCard from "../components/WeatherCard"
 
 const TABS = [
   ['Itinerary', IconRoute],
@@ -46,6 +47,12 @@ export default function TripDetail() {
   const status = tripStatus(trip.startDate, trip.endDate)
   const days = tripLength(trip.startDate, trip.endDate)
 
+  const changeCover = async () => {
+    const url = prompt("Cover image URL (leave empty to use the default photo)", trip.coverImageUrl || "")
+    if (url === null) return
+    try { setTrip(await trips.update(tripId, { coverImageUrl: url.trim() })) } catch (e) { alert(errMsg(e)) }
+  }
+
   const rename = async () => {
     const title = prompt('New trip title', trip.name)
     if (!title) return
@@ -60,7 +67,7 @@ export default function TripDetail() {
   return (
     <>
       <Link to="/" className="back-link"><IconArrowLeft size={16} /> All trips</Link>
-      <div className="hero" style={{ backgroundImage: `url(${tripImage(trip.id, trip.destination)})` }}>
+      <div className="hero" style={{ backgroundImage: `url(${trip.coverImageUrl || tripImage(trip.id, trip.destination)})` }}>
         <div className="row between" style={{ alignItems: 'flex-start' }}>
           <div>
             <div className="row" style={{ marginBottom: 6 }}>
@@ -77,12 +84,15 @@ export default function TripDetail() {
           {canManage && (
             <div className="actions">
               <button className="secondary small" onClick={rename}>Rename</button>
+              <button className="secondary small" onClick={changeCover}>Cover</button>
               {myRole === 'OWNER' && <button className="danger small" onClick={remove}>Delete</button>}
             </div>
           )}
         </div>
         {trip.description && <p>{trip.description}</p>}
       </div>
+
+      <WeatherCard destination={trip.destination} />
 
       <div className="tabs" role="tablist">
         {TABS.map(([t, Icon]) => (

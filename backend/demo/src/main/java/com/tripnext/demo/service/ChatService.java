@@ -31,6 +31,7 @@ public class ChatService {
     private final TripRepo tripRepo;
     private final TripMemberRepo tripMemberRepo;
     private final CurrentUserService currentUserService;
+    private final RealtimeBroadcaster realtimeBroadcaster;
 
     @Transactional
     public ChatMessageResponse saveMessage(
@@ -57,7 +58,12 @@ public class ChatService {
         ChatMessage saved =
                 chatMessageRepo.save(chatMessage);
 
-        return map(saved);
+        ChatMessageResponse response = map(saved);
+
+        // Same path for REST and STOMP sends, so both reach live subscribers.
+        realtimeBroadcaster.send("/topic/trip/" + tripId + "/chat", response);
+
+        return response;
     }
 
 @Transactional

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { itinerary } from '../../api'
 import { errMsg } from '../../api/client'
 import { connectSocket } from '../../api/socket'
+import LocationInput from '../LocationInput'
 import { Empty, fmtDate, money } from '../ui'
 
 const emptyAct = { title: '', location: '', startTime: '', endTime: '', estimatedCost: '' }
@@ -9,7 +10,7 @@ const emptyAct = { title: '', location: '', startTime: '', endTime: '', estimate
 // datetime-local gives "2026-01-01T10:00"; backend wants an OffsetDateTime -> send ISO with Z.
 const toIso = (v) => (v ? new Date(v).toISOString() : null)
 
-export default function ItineraryTab({ tripId }) {
+export default function ItineraryTab({ tripId, canManage }) {
   const [days, setDays] = useState([])
   const [error, setError] = useState('')
   const [dayForm, setDayForm] = useState({ date: '', title: '', notes: '' })
@@ -90,6 +91,8 @@ export default function ItineraryTab({ tripId }) {
       await itinerary.createActivity(tripId, day.id, {
         title: f.title,
         location: f.location || null,
+        latitude: f.latitude ?? null,
+        longitude: f.longitude ?? null,
         startTime: toIso(f.startTime),
         endTime: toIso(f.endTime),
         estimatedCost: f.estimatedCost ? Number(f.estimatedCost) : null,
@@ -112,15 +115,22 @@ export default function ItineraryTab({ tripId }) {
     <>
       {error && <div className="error">{error}</div>}
 
-      <form className="card inline" onSubmit={addDay}>
-        <h3 style={{ width: '100%', margin: '0 0 4px' }}>Add a day</h3>
-        <div className="field"><label>Date</label><input type="date" value={dayForm.date} onChange={(e) => setDayForm({ ...dayForm, date: e.target.value })} required /></div>
-        <div className="field"><label>Title</label><input value={dayForm.title} onChange={(e) => setDayForm({ ...dayForm, title: e.target.value })} required /></div>
-        <div className="field"><label>Notes</label><input value={dayForm.notes} onChange={(e) => setDayForm({ ...dayForm, notes: e.target.value })} /></div>
-        <button>+ Add day</button>
-      </form>
+      {/* days are managed by owners/admins; every member can add and reorder activities */}
+      {canManage && (
+        <form className="card inline" onSubmit={addDay}>
+          <h3 style={{ width: '100%', margin: '0 0 4px' }}>Add a day</h3>
+          <div className="field"><label>Date</label><input type="date" value={dayForm.date} onChange={(e) => setDayForm({ ...dayForm, date: e.target.value })} required /></div>
+          <div className="field"><label>Title</label><input value={dayForm.title} onChange={(e) => setDayForm({ ...dayForm, title: e.target.value })} required /></div>
+          <div className="field"><label>Notes</label><input value={dayForm.notes} onChange={(e) => setDayForm({ ...dayForm, notes: e.target.value })} /></div>
+          <button>+ Add day</button>
+        </form>
+      )}
 
-      {days.length === 0 && <Empty icon="🗺️" title="No days planned yet">Add your first day above to start the itinerary.</Empty>}
+      {days.length === 0 && (
+        <Empty icon="🗺️" title="No days planned yet">
+          {canManage ? 'Add your first day above to start the itinerary.' : 'The trip owner or an admin will add days soon.'}
+        </Empty>
+      )}
       {days.map((day) => {
         const f = actForm[day.id] || emptyAct
         return (
@@ -138,13 +148,15 @@ export default function ItineraryTab({ tripId }) {
                   <div className="muted">{fmtDate(day.date, { weekday: 'long', day: 'numeric', month: 'short' })}</div>
                 </div>
               </div>
-              <div className="row">
-                <button className="secondary small" onClick={() => {
-                  const title = prompt('Day title', day.title)
-                  if (title) run(() => itinerary.updateDay(tripId, day.id, { title, notes: day.notes }))
-                }}>Edit</button>
-                <button className="danger small" onClick={() => confirm('Delete day?') && run(() => itinerary.deleteDay(tripId, day.id))}>Delete</button>
-              </div>
+              {canManage && (
+                <div className="row">
+                  <button className="secondary small" onClick={() => {
+                    const title = prompt('Day title', day.title)
+                    if (title) run(() => itinerary.updateDay(tripId, day.id, { title, notes: day.notes }))
+                  }}>Edit</button>
+                  <button className="danger small" onClick={() => confirm('Delete day?') && run(() => itinerary.deleteDay(tripId, day.id))}>Delete</button>
+                </div>
+              )}
             </div>
             {day.notes && <p className="muted" style={{ margin: '10px 0 0' }}>{day.notes}</p>}
 
@@ -187,7 +199,9 @@ export default function ItineraryTab({ tripId }) {
 
             <form className="inline" style={{ marginTop: 14, paddingTop: 14, borderTop: '1px solid var(--border)' }} onSubmit={(e) => addActivity(e, day)}>
               <div className="field"><input placeholder="Activity" value={f.title} onChange={setAct(day.id, 'title')} required /></div>
-              <div className="field"><input placeholder="Location" value={f.location} onChange={setAct(day.id, 'location')} /></div>
+              <div className="field">
+                <LocationInput value={f} onChange={(loc) => setActForm({ ...actForm, [day.id]: { ...(actForm[day.id] || emptyAct), ...loc } })} />
+              </div>
               <div className="field"><input type="datetime-local" value={f.startTime} onChange={setAct(day.id, 'startTime')} /></div>
               <div className="field"><input type="number" min="0" placeholder="Cost" value={f.estimatedCost} onChange={setAct(day.id, 'estimatedCost')} /></div>
               <button className="small">+ Add activity</button>

@@ -4,7 +4,6 @@ import java.util.UUID;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
-import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 
 import com.tripnext.demo.dto.notification.NotificationResponse;
@@ -24,7 +23,7 @@ public class NotificationService {
 
     private final NotificationRepo notificationRepo;
     private final CurrentUserService currentUserService;
-    private final SimpMessagingTemplate messagingTemplate;
+    private final RealtimeBroadcaster realtimeBroadcaster;
 
 @Transactional
     public Page<NotificationResponse> getNotifications(Pageable pageable) {
@@ -79,8 +78,8 @@ public class NotificationService {
         
         NotificationResponse response = map(saved);
 
-        // Broadcast to user's private topic
-        messagingTemplate.convertAndSend(
+        // Write-then-broadcast: the frame goes out after this transaction commits.
+        realtimeBroadcaster.send(
                 "/topic/user/" + targetUser.getId() + "/notifications",
                 response
         );

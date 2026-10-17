@@ -5,6 +5,8 @@ import java.util.UUID;
 
 
 import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
@@ -13,6 +15,7 @@ import com.tripnext.demo.dto.document.CommitDocumentRequest;
 import com.tripnext.demo.dto.document.CommitMediaRequest;
 import com.tripnext.demo.dto.document.DocumentResponse;
 import com.tripnext.demo.dto.document.TripMediaResponse;
+import com.tripnext.demo.dto.document.UpdateMediaRequest;
 import com.tripnext.demo.dto.document.UploadUrlRequest;
 import com.tripnext.demo.exception.BadRequestException;
 import com.tripnext.demo.exception.ResourceNotFoundException;
@@ -24,6 +27,7 @@ import com.tripnext.demo.model.TripMember;
 import com.tripnext.demo.model.User;
 import com.tripnext.demo.model.help.DocType;
 import com.tripnext.demo.model.help.MediaFileType;
+import com.tripnext.demo.model.help.NotificationType;
 import com.tripnext.demo.model.help.TripMemberRole;
 import com.tripnext.demo.repo.DocumentRepo;
 import com.tripnext.demo.repo.TripMediaRepo;
@@ -49,6 +53,7 @@ public class FileService {
     private final FileStorageService fileStorageService;
     private final FileValidator fileValidator;
     private final AuditLogService auditLogService;
+    private final NotificationService notificationService;
     @Transactional
     @CacheEvict(value = "tripDocuments", key = "#tripId")
 public DocumentResponse uploadDocument(
@@ -93,6 +98,8 @@ public DocumentResponse uploadDocument(
   
     Document saved =
             documentRepo.save(document);
+
+    notifyDocumentUploaded(trip, currentUser, saved);
 
     return new DocumentResponse(
             saved.getId(),
@@ -150,13 +157,7 @@ public TripMediaResponse uploadMedia(
     TripMedia saved =
             tripMediaRepo.save(media);
 
-    return new TripMediaResponse(
-            saved.getId(),
-            fileStorageService.getDownloadUrl(StorageBucket.MEDIA, saved.getStorageKey()),
-            saved.getMediaFileType(),
-            saved.getCaption(),
-            saved.getCreatedAt()
-    );
+    return toMediaResponse(saved);
 }
     // Not cached: cache hits skipped the membership check and records with OffsetDateTime don't round-trip through the Redis JSON serializer.
 @Transactional
@@ -183,9 +184,11 @@ public List<DocumentResponse> getDocuments(
             .toList();
 }
     // Not cached: cache hits skipped the membership check and records with OffsetDateTime don't round-trip through the Redis JSON serializer.
+// Chronological gallery, newest first, paginated (SRS FR-MEDIA-002).
 @Transactional
-public List<TripMediaResponse> getMedia(
-        UUID tripId
+public Page<TripMediaResponse> getMedia(
+        UUID tripId,
+        Pageable pageable
 ) {
 
     Trip trip =
@@ -194,16 +197,61 @@ public List<TripMediaResponse> getMedia(
         );
 
     return tripMediaRepo
-            .findByTripOrderByCreatedAtDesc(trip)
-            .stream()
-            .map(media -> new TripMediaResponse(
-                    media.getId(),
-                    fileStorageService.getDownloadUrl(StorageBucket.MEDIA, media.getStorageKey()),
-                    media.getMediaFileType(),
-                    media.getCaption(),
-                    media.getCreatedAt()
-            ))
-            .toList();
+            .findByTripOrderByCreatedAtDesc(trip, pageable)
+            .map(this::toMediaResponse);
+}
+
+// The uploader, or an owner/admin, can change a caption.
+@Transactional
+public TripMediaResponse updateMediaCaption(
+        UUID mediaId,
+        UpdateMediaRequest request
+) {
+    User currentUser = currentUserService.getCurrentUser();
+
+    TripMedia media = tripMediaRepo.findById(mediaId)
+            .orElseThrow(() -> new ResourceNotFoundException("Media not found"));
+
+    getTripAndValidateMembership(media.getTrip().getId());
+    if (!media.getUploadedBy().getId().equals(currentUser.getId())) {
+        validateCanManageFiles(media.getTrip());
+    }
+
+    String caption = request.caption() == null ? null : request.caption().trim();
+    if (caption != null && caption.length() > 500) {
+        throw new BadRequestException("Caption can be at most 500 characters");
+    }
+    media.setCaption(caption == null || caption.isEmpty() ? null : caption);
+
+    return toMediaResponse(tripMediaRepo.save(media));
+}
+
+private TripMediaResponse toMediaResponse(TripMedia media) {
+    return new TripMediaResponse(
+            media.getId(),
+            fileStorageService.getDownloadUrl(StorageBucket.MEDIA, media.getStorageKey()),
+            media.getMediaFileType(),
+            media.getCaption(),
+            media.getCreatedAt(),
+            media.getUploadedBy().getId(),
+            media.getUploadedBy().getName()
+    );
+}
+
+// Tell the other members a shared document was added.
+private void notifyDocumentUploaded(Trip trip, User uploader, Document document) {
+    for (TripMember member : tripMemberRepo.findByTrip(trip)) {
+        if (!member.getUser().getId().equals(uploader.getId())) {
+            notificationService.createNotification(
+                    member.getUser(),
+                    trip,
+                    NotificationType.DOCUMENT_UPLOADED,
+                    "New document",
+                    uploader.getName() + " shared \"" + document.getFileName() + "\" in \"" + trip.getTitle() + "\"",
+                    "/trips/" + trip.getId()
+            );
+        }
+    }
 }
 @Transactional
 @CacheEvict(value = "tripDocuments", allEntries = true)
@@ -357,13 +405,7 @@ public TripMediaResponse getMediaById(
             media.getTrip().getId()
     );
 
-    return new TripMediaResponse(
-            media.getId(),
-            fileStorageService.getDownloadUrl(StorageBucket.MEDIA, media.getStorageKey()),
-            media.getMediaFileType(),
-            media.getCaption(),
-            media.getCreatedAt()
-    );
+    return toMediaResponse(media);
 }
 
     // ---- Two-phase direct upload (SRS 11.4) ----
@@ -436,6 +478,8 @@ public TripMediaResponse getMediaById(
                 )
         );
 
+        notifyDocumentUploaded(trip, currentUser, saved);
+
         return new DocumentResponse(
                 saved.getId(),
                 saved.getFileName(),
@@ -480,13 +524,7 @@ public TripMediaResponse getMediaById(
                 )
         );
 
-        return new TripMediaResponse(
-                saved.getId(),
-                fileStorageService.getDownloadUrl(StorageBucket.MEDIA, saved.getStorageKey()),
-                saved.getMediaFileType(),
-                saved.getCaption(),
-                saved.getCreatedAt()
-        );
+        return toMediaResponse(saved);
     }
 
     private long sizeOf(UploadUrlRequest request) {

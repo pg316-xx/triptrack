@@ -1,5 +1,7 @@
 package com.tripnext.demo.config;
 
+import io.jsonwebtoken.JwtException;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import java.io.IOException;
 
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -45,13 +47,24 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
         String token = authHeader.substring(7);
 
-        String email = jwtService.extractEmail(token);
+        UserDetails userDetails;
+        try {
+            // Expired/forged/refresh tokens and deleted users are simply "not
+            // signed in": the request continues unauthenticated and protected
+            // endpoints answer 401, which tells the client to refresh.
+            if (!jwtService.isAccessToken(token)) {
+                filterChain.doFilter(request, response);
+                return;
+            }
+            String email = jwtService.extractEmail(token);
+            userDetails = email == null ? null : userDetailsService.loadUserByUsername(email);
+        } catch (JwtException | IllegalArgumentException | UsernameNotFoundException e) {
+            filterChain.doFilter(request, response);
+            return;
+        }
 
-        if (email != null &&
+        if (userDetails != null && userDetails.isEnabled() &&
                 SecurityContextHolder.getContext().getAuthentication() == null) {
-
-            UserDetails userDetails =
-                    userDetailsService.loadUserByUsername(email);
 
             if (jwtService.isTokenValid(token, userDetails.getUsername())) {
 

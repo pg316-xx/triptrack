@@ -8,16 +8,20 @@ export const auth = {
   register: (body) => d(client.post('/api/auth/register', body)), // {name,email,password}
   login: (body) => d(client.post('/api/auth/login', body)), // {email,password}
   google: (idToken) => d(client.post('/api/auth/google-login', { idToken })),
-  logout: (refreshToken) => client.post('/api/auth/logout', { refreshToken }),
+  logout: (refreshToken) => client.post("/api/auth/logout", { refreshToken }),
+  forgotPassword: (email) => d(client.post("/api/auth/forgot-password", { email })),
+  resetPassword: (token, newPassword) => d(client.post("/api/auth/reset-password", { token, newPassword })),
 }
 
 export const users = {
   me: () => d(client.get('/api/users/me')),
   update: (body) => d(client.put('/api/users/me', body)), // {name,profileImageUrl}
+  deleteMe: () => client.delete("/api/users/me"),
 }
 
 export const trips = {
-  list: () => d(client.get('/api/trips')),
+  // paginated on the server; the dashboard shows up to 100 trips
+  list: () => d(client.get("/api/trips", { params: { page: 0, size: 100 } })).then((p) => p.content),
   get: (id) => d(client.get(`/api/trips/${id}`)),
   create: (body) => d(client.post('/api/trips', body)), // {title,description,destination,startDate,endDate}
   update: (id, body) => d(client.patch(`/api/trips/${id}`, body)),
@@ -28,7 +32,7 @@ export const trips = {
   leave: (id) => client.post(`/api/trips/${id}/leave`),
   transferOwner: (id, userId) => client.patch(`/api/trips/${id}/owner`, { userId }),
   invitations: (id) => d(client.get(`/api/trips/${id}/invitations`)),
-  invite: (id, body) => d(client.post(`/api/trips/${id}/invitations`, body)), // {role,usageLimit}
+  invite: (id, body) => d(client.post(`/api/trips/${id}/invitations`, body)), // {role,usageLimit,email?}
   auditLogs: (id, page = 0) =>
     d(client.get(`/api/trips/${id}/audit-logs`, { params: { page, size: 20 } })),
 }
@@ -95,7 +99,9 @@ export const files = {
     return d(client.post(`/api/trips/${tripId}/documents`, { storageKey, fileName: file.name, documentType }))
   },
   deleteDocument: (tripId, id) => client.delete(`/api/trips/${tripId}/documents/${id}`),
-  media: (tripId) => d(client.get(`/api/trips/${tripId}/media`)),
+  // paginated: returns { content, last, number, ... }
+  media: (tripId, page = 0) => d(client.get(`/api/trips/${tripId}/media`, { params: { page, size: 24 } })),
+  updateMedia: (tripId, id, caption) => d(client.patch(`/api/trips/${tripId}/media/${id}`, { caption })),
   uploadMedia: async (tripId, file, mediaFileType, caption) => {
     const storageKey = await directUpload(`/api/trips/${tripId}/media/upload-url`, file)
     return d(client.post(`/api/trips/${tripId}/media`, { storageKey, mediaFileType, caption }))
@@ -121,4 +127,13 @@ export const notifications = {
   unreadCount: () => d(client.get('/api/notifications/unread-count')), // {unreadCount}
   markRead: (id) => client.patch(`/api/notifications/${id}/read`),
   markAllRead: () => client.patch('/api/notifications/read-all'),
+}
+
+// Place search and weather go through the backend (keys stay server-side; results cached in Redis).
+export const places = {
+  search: (q) => d(client.get('/api/locations/search', { params: { q } })), // [{name,address,latitude,longitude}]
+}
+
+export const weather = {
+  get: (lat, lon) => d(client.get('/api/weather', { params: { lat, lon } })),
 }

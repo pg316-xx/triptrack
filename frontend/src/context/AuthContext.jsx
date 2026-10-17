@@ -30,8 +30,9 @@ export function AuthProvider({ children }) {
   }
 
   const register = async (name, email, password) => {
-    await auth.register({ name, email, password })
-    await login(email, password)
+    // register already returns a token pair; no second (BCrypt-costly) login needed
+    tokens.set(await auth.register({ name, email, password }))
+    await loadMe()
   }
 
   const logout = async () => {

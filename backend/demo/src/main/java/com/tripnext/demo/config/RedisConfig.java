@@ -8,6 +8,10 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.data.redis.cache.RedisCacheConfiguration;
 import org.springframework.data.redis.cache.RedisCacheManager;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
+import org.springframework.data.redis.listener.ChannelTopic;
+import org.springframework.data.redis.listener.RedisMessageListenerContainer;
+
+import com.tripnext.demo.service.RealtimeBroadcaster;
 import org.springframework.data.redis.serializer.GenericJackson2JsonRedisSerializer;
 import org.springframework.data.redis.serializer.RedisSerializationContext;
 import org.springframework.data.redis.serializer.StringRedisSerializer;
@@ -15,6 +19,18 @@ import org.springframework.data.redis.serializer.StringRedisSerializer;
 @Configuration
 @EnableCaching
 public class RedisConfig {
+
+    // Delivers STOMP frames published by any backend instance (see RealtimeBroadcaster).
+    @Bean
+    public RedisMessageListenerContainer realtimeListenerContainer(
+            RedisConnectionFactory connectionFactory,
+            RealtimeBroadcaster realtimeBroadcaster
+    ) {
+        RedisMessageListenerContainer container = new RedisMessageListenerContainer();
+        container.setConnectionFactory(connectionFactory);
+        container.addMessageListener(realtimeBroadcaster, new ChannelTopic(RealtimeBroadcaster.CHANNEL));
+        return container;
+    }
 
     @Bean
     public RedisCacheManager cacheManager(RedisConnectionFactory connectionFactory) {

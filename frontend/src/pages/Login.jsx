@@ -41,7 +41,10 @@ export default function Login() {
           <input id="email" type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} required autoFocus />
         </div>
         <div className="field">
-          <label htmlFor="password">Password</label>
+          <div className="row between" style={{ marginBottom: 6 }}>
+            <label htmlFor="password" style={{ margin: 0 }}>Password</label>
+            <Link to="/forgot-password" style={{ fontSize: '0.8rem' }}>Forgot password?</Link>
+          </div>
           <input id="password" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} required />
         </div>
         <button className="block accent" disabled={busy}>{busy ? 'Logging in…' : 'Log in'} <IconArrowRight size={16} /></button>

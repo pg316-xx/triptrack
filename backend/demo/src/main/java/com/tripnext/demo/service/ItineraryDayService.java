@@ -117,6 +117,32 @@ public class ItineraryDayService {
         }
     }
 
+    // Any member may add, edit and reorder activities (SRS 12.2: MEMBER "add/reorder activities").
+    private void validateTripMemberAccess(
+            Trip trip,
+            User user
+    ) {
+        if (!tripMemberRepo.existsByTripAndUser(trip, user)) {
+            throw new UnauthorizedException(
+                    "Not a member of this trip"
+            );
+        }
+    }
+
+    // Deleting is limited to whoever created the activity, or an owner/admin.
+    private void validateCanDeleteActivity(
+            Activity activity,
+            Trip trip,
+            User user
+    ) {
+        if (activity.getCreatedBy() != null
+                && activity.getCreatedBy().getId().equals(user.getId())) {
+            validateTripMemberAccess(trip, user);
+            return;
+        }
+        validateTripAdminAccess(trip, user);
+    }
+
     private void validateTripAdminAccess(
             Trip trip,
             User user
@@ -353,7 +379,7 @@ public ActivityResponse createActivity(
                     )
             );
 
-    validateTripAdminAccess(
+    validateTripMemberAccess(
             trip,
             currentUser
     );
@@ -431,7 +457,7 @@ public ActivityResponse updateActivity(
             .getItineraryDay()
             .getTrip();
 
-    validateTripAdminAccess(
+    validateTripMemberAccess(
             trip,
             currentUser
     );
@@ -502,7 +528,7 @@ public ActivityResponse moveActivity(
             .getItineraryDay()
             .getTrip();
 
-    validateTripAdminAccess(
+    validateTripMemberAccess(
             trip,
             currentUser
     );
@@ -598,7 +624,8 @@ public void deleteActivity(
             .getItineraryDay()
             .getTrip();
 
-    validateTripAdminAccess(
+    validateCanDeleteActivity(
+            activity,
             trip,
             currentUser
     );

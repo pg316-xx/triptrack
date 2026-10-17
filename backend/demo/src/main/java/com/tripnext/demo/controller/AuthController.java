@@ -4,7 +4,11 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.Map;
+
 import com.tripnext.demo.dto.auth.AuthResponse;
+import com.tripnext.demo.dto.auth.ForgotPasswordRequest;
+import com.tripnext.demo.dto.auth.ResetPasswordRequest;
 import com.tripnext.demo.dto.auth.GoogleLoginRequest;
 import com.tripnext.demo.dto.auth.LoginRequest;
 import com.tripnext.demo.dto.auth.RefreshTokenRequest;
@@ -58,6 +62,27 @@ public class AuthController {
 
     return ResponseEntity.ok().build();
     }
+    // Always 200: the response never reveals whether the email has an account.
+    @PostMapping("/forgot-password")
+    public ResponseEntity<Map<String, String>> forgotPassword(
+            @RequestBody ForgotPasswordRequest request
+    ) {
+        authService.forgotPassword(request);
+        return ResponseEntity.ok(Map.of(
+                "message", "If that email has an account, we've sent a reset link."
+        ));
+    }
+
+    @PostMapping("/reset-password")
+    public ResponseEntity<Map<String, String>> resetPassword(
+            @RequestBody ResetPasswordRequest request
+    ) {
+        authService.resetPassword(request);
+        return ResponseEntity.ok(Map.of(
+                "message", "Password updated. Please log in with your new password."
+        ));
+    }
+
     @PostMapping("/google-login")
     public AuthResponse googleLogin(
             @RequestBody GoogleLoginRequest request

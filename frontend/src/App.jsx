@@ -13,6 +13,8 @@ import Invite from './pages/Invite'
 import Profile from './pages/Profile'
 import Notifications from './pages/Notifications'
 import Wallet from './pages/Wallet'
+import ForgotPassword from './pages/ForgotPassword'
+import ResetPassword from './pages/ResetPassword'
 
 function Shell({ children }) {
   return (
@@ -44,6 +46,8 @@ export default function App() {
       <Route path="/" element={<Home />} />
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
+      <Route path="/forgot-password" element={<ForgotPassword />} />
+      <Route path="/reset-password" element={<ResetPassword />} />
       <Route path="/trips/:tripId" element={<Protected><TripDetail /></Protected>} />
       <Route path="/invite" element={<Protected><Invite /></Protected>} />
       <Route path="/profile" element={<Protected><Profile /></Protected>} />

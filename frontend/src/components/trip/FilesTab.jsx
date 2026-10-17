@@ -5,9 +5,10 @@ import { Empty } from '../ui'
 
 const DOC_TYPES = ['FLIGHT_TICKET', 'HOTEL_BOOKING', 'PASSPORT', 'VISA', 'INSURANCE', 'OTHER']
 
-export default function FilesTab({ tripId }) {
+export default function FilesTab({ tripId, user, canManage }) {
   const [docs, setDocs] = useState([])
   const [media, setMedia] = useState([])
+  const [mediaPage, setMediaPage] = useState(null) // last page meta, for "load more"
   const [shared, setShared] = useState([])
   const [error, setError] = useState('')
   const [docType, setDocType] = useState('OTHER')
@@ -16,10 +17,18 @@ export default function FilesTab({ tripId }) {
   const load = async () => {
     try {
       const [d, m, w] = await Promise.all([files.documents(tripId), files.media(tripId), wallet.sharedWithTrip(tripId)])
-      setDocs(d); setMedia(m); setShared(w)
+      setDocs(d); setMedia(m.content); setMediaPage(m); setShared(w)
     } catch (e) { setError(errMsg(e)) }
   }
   useEffect(() => { load() }, [tripId])
+
+  const loadMoreMedia = async () => {
+    try {
+      const next = await files.media(tripId, mediaPage.number + 1)
+      setMedia((prev) => [...prev, ...next.content.filter((x) => !prev.some((p) => p.id === x.id))])
+      setMediaPage(next)
+    } catch (e) { setError(errMsg(e)) }
+  }
 
   const run = async (fn) => {
     setError('')
@@ -97,13 +106,27 @@ export default function FilesTab({ tripId }) {
           {media.map((m) => (
             <div key={m.id} className="tile">
               {m.mediaType === 'VIDEO' ? <video src={m.fileUrl} controls /> : <img src={m.fileUrl} alt={m.caption || ''} />}
-              <div className="row between">
-                <span className="muted" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>{m.caption}</span>
-                <button className="danger small" onClick={() => run(() => files.deleteMedia(tripId, m.id))}>✕</button>
+              <div className="row between" style={{ flexWrap: 'nowrap' }}>
+                <div style={{ minWidth: 0, flex: 1 }}>
+                  <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '0.85rem' }}>{m.caption || <span className="muted">No caption</span>}</div>
+                  <div className="muted" style={{ fontSize: '0.72rem' }}>by {m.uploadedByUserId === user?.id ? 'you' : m.uploadedByName}</div>
+                </div>
+                {(m.uploadedByUserId === user?.id || canManage) && (
+                  <button className="ghost small" aria-label="Edit caption" onClick={() => {
+                    const c = prompt('Caption', m.caption || '')
+                    if (c !== null) run(() => files.updateMedia(tripId, m.id, c))
+                  }}>✎</button>
+                )}
+                <button className="danger small" aria-label="Delete photo" onClick={() => run(() => files.deleteMedia(tripId, m.id))}>✕</button>
               </div>
             </div>
           ))}
         </div>
+        {mediaPage && !mediaPage.last && (
+          <div style={{ textAlign: 'center', marginTop: 14 }}>
+            <button className="secondary small" onClick={loadMoreMedia}>Load more photos</button>
+          </div>
+        )}
       </div>
     </>
   )

@@ -21,6 +21,10 @@ import lombok.RequiredArgsConstructor;
 import java.util.List;
 import java.util.UUID;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -40,11 +44,15 @@ public class TripController {
 
     private final TripService tripService;
 
+    // ?page=0&size=20 (newest trips first by default)
     @GetMapping
-    public ResponseEntity<List<TripResponse>> getAllTrips() {
+    public ResponseEntity<Page<TripResponse>> getAllTrips(
+            @PageableDefault(size = 20, sort = "startDate", direction = Sort.Direction.DESC)
+            Pageable pageable
+    ) {
 
         return ResponseEntity.ok(
-                tripService.getTrips()
+                tripService.getTrips(pageable)
         );
     }
 

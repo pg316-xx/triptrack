@@ -1,1 +1,2 @@
 .env
+loadtest/k6/users.json

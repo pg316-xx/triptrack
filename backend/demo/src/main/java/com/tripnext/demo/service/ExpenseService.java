@@ -127,6 +127,14 @@ private ExpenseResponse doCreateExpense(
 
     List<ExpenseSplit> splits = saveSplits(savedExpense, shares);
 
+    auditLogService.logAction(
+            trip,
+            "EXPENSE_CREATED",
+            "Expense",
+            savedExpense.getId(),
+            "Added expense: " + savedExpense.getTitle() + " (" + savedExpense.getAmount() + ")"
+    );
+
     for (User participant : shares.keySet()) {
         if (!participant.getId().equals(currentUser.getId())) {
             notificationService.createNotification(
@@ -642,6 +650,15 @@ private SettlementResponse doCreateSettlement(
                             request.amount()
                     )
             );
+
+    notificationService.createNotification(
+            paidTo,
+            trip,
+            NotificationType.EXPENSE_SETTLED,
+            "Payment recorded",
+            currentUser.getName() + " paid you " + request.amount() + " in \"" + trip.getTitle() + "\"",
+            "/trips/" + tripId + "/expenses"
+    );
 
     return toSettlementResponse(saved);
 }

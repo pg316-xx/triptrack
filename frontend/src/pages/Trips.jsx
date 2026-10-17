@@ -169,7 +169,7 @@ export default function Trips() {
             const status = tripStatus(t.startDate, t.endDate)
             const days = tripLength(t.startDate, t.endDate)
             return (
-              <Link key={t.id} to={`/trips/${t.id}`} className="dest-card" style={{ backgroundImage: `url(${tripImage(t.id, t.destination)})` }}>
+              <Link key={t.id} to={`/trips/${t.id}`} className="dest-card" style={{ backgroundImage: `url(${t.coverImageUrl || tripImage(t.id, t.destination)})` }}>
                 <div className="top">
                   {status && <span className="pill dark"><IconSparkle size={11} /> {status.label}</span>}
                 </div>

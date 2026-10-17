@@ -10,6 +10,7 @@ public class SecurityBeansConfig {
 
     @Bean
     public PasswordEncoder passwordEncoder() {
-        return new BCryptPasswordEncoder();
+        // cost 12 per SRS NFR-SEC-001; existing cost-10 hashes still verify
+        return new BCryptPasswordEncoder(12);
     }
 }

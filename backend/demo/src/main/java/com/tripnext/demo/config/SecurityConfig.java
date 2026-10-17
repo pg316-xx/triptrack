@@ -3,6 +3,7 @@ package com.tripnext.demo.config;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpStatus;
 
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
@@ -85,11 +86,25 @@ DaoAuthenticationProvider authenticationProvider() {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(
                                 "/api/auth/**",
-                                "/ws-trip/**"
+                                "/ws-trip/**",
+                                "/ws-trip-sockjs/**",
+                                // load balancer health checks
+                                "/actuator/health",
+                                "/actuator/health/**"
                         ).permitAll()
 
                         .anyRequest()
                         .authenticated()
+                )
+
+                // Problem Detail bodies; 401 (not Spring's default 403) when there's no valid token.
+                .exceptionHandling(ex -> ex
+                        .authenticationEntryPoint((request, response, e) ->
+                                ProblemJson.write(request, response, HttpStatus.UNAUTHORIZED,
+                                        "UNAUTHORIZED", "Sign in to continue"))
+                        .accessDeniedHandler((request, response, e) ->
+                                ProblemJson.write(request, response, HttpStatus.FORBIDDEN,
+                                        "FORBIDDEN", "You don't have access to this resource"))
                 )
 
                 .authenticationProvider(
@@ -109,7 +124,8 @@ DaoAuthenticationProvider authenticationProvider() {
         CorsConfiguration configuration = new CorsConfiguration();
         configuration.setAllowedOrigins(Arrays.asList(allowedOrigins.split(",")));
         configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
-        configuration.setAllowedHeaders(Arrays.asList("Authorization", "Content-Type", "Idempotency-Key"));
+        configuration.setAllowedHeaders(Arrays.asList("Authorization", "Content-Type", "Idempotency-Key", "X-Request-ID"));
+        configuration.setExposedHeaders(Arrays.asList("X-Request-ID", "Retry-After"));
         configuration.setAllowCredentials(true);
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", configuration);

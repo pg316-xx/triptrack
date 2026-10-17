@@ -16,6 +16,11 @@ import io.jsonwebtoken.security.Keys;
 @Service
 public class JwtService {
 
+    // Refresh tokens must not be usable as access tokens (they live 7 days).
+    private static final String TYPE_CLAIM = "typ";
+    private static final String ACCESS = "access";
+    private static final String REFRESH = "refresh";
+
     @Value("${jwt.secret}")
     private String secret;
 
@@ -42,6 +47,7 @@ public class JwtService {
         return Jwts.builder()
                 .id(UUID.randomUUID().toString())
                 .subject(email)
+                .claim(TYPE_CLAIM, ACCESS)
                 .issuedAt(now)
                 .expiration(expiry)
                 .signWith(getSigningKey())
@@ -62,10 +68,17 @@ public class JwtService {
         return Jwts.builder()
                 .id(UUID.randomUUID().toString())
                 .subject(email)
+                .claim(TYPE_CLAIM, REFRESH)
                 .issuedAt(now)
                 .expiration(expiry)
                 .signWith(getSigningKey())
                 .compact();
+    }
+
+    // Tokens issued before the typ claim existed count as access tokens.
+    public boolean isAccessToken(String token) {
+        Object type = extractClaims(token).get(TYPE_CLAIM);
+        return type == null || ACCESS.equals(type);
     }
 
     public String extractEmail(String token) {

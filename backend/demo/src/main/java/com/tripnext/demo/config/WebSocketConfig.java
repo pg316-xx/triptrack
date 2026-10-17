@@ -1,5 +1,6 @@
 package com.tripnext.demo.config;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.messaging.simp.config.ChannelRegistration;
 import org.springframework.messaging.simp.config.MessageBrokerRegistry;
@@ -18,13 +19,23 @@ public class WebSocketConfig
     private final WebSocketAuthChannelInterceptor
             authChannelInterceptor;
 
+    // Same origins as REST CORS; "*" previously let any site open a socket.
+    @Value("${app.cors.allowed-origins}")
+    private String allowedOrigins;
+
     @Override
     public void registerStompEndpoints(
             StompEndpointRegistry registry
     ) {
 
+        // Native WebSocket (what the React app uses)
         registry.addEndpoint("/ws-trip")
-                .setAllowedOriginPatterns("*");
+                .setAllowedOriginPatterns(allowedOrigins.split(","));
+
+        // SockJS fallback for networks/proxies that block WebSockets
+        registry.addEndpoint("/ws-trip-sockjs")
+                .setAllowedOriginPatterns(allowedOrigins.split(","))
+                .withSockJS();
     }
 
     @Override

@@ -4,8 +4,12 @@ import java.util.List;
 import java.util.UUID;
 
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -19,6 +23,7 @@ import com.tripnext.demo.dto.document.CommitDocumentRequest;
 import com.tripnext.demo.dto.document.CommitMediaRequest;
 import com.tripnext.demo.dto.document.DocumentResponse;
 import com.tripnext.demo.dto.document.TripMediaResponse;
+import com.tripnext.demo.dto.document.UpdateMediaRequest;
 import com.tripnext.demo.dto.document.UploadUrlRequest;
 import com.tripnext.demo.model.help.DocType;
 import com.tripnext.demo.model.help.MediaFileType;
@@ -128,16 +133,28 @@ getDocuments(
             )
     );
 }
+// ?page=0&size=24, newest first
 @GetMapping("/media")
-public ResponseEntity<List<TripMediaResponse>>
+public ResponseEntity<Page<TripMediaResponse>>
 getMedia(
-        @PathVariable UUID tripId
+        @PathVariable UUID tripId,
+        @PageableDefault(size = 24) Pageable pageable
 ) {
 
     return ResponseEntity.ok(
             fileService.getMedia(
-                    tripId
+                    tripId,
+                    pageable
             )
+    );
+}
+@PatchMapping("/media/{mediaId}")
+public ResponseEntity<TripMediaResponse> updateMedia(
+        @PathVariable UUID mediaId,
+        @RequestBody UpdateMediaRequest request
+) {
+    return ResponseEntity.ok(
+            fileService.updateMediaCaption(mediaId, request)
     );
 }
 @DeleteMapping("/documents/{documentId}")

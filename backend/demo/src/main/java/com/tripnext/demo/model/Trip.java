@@ -35,6 +35,9 @@ public class Trip {
     @Column(length = 1000)
     private String description;
 
+    @Column(name = "cover_image_url", length = 1000)
+    private String coverImageUrl;
+
     @Column(nullable = false, length = 100)
     private String destination;
 

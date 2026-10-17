@@ -1,6 +1,7 @@
 package com.tripnext.demo.controller;
 
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -9,6 +10,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.tripnext.demo.dto.user.UpdateProfileRequest;
 import com.tripnext.demo.dto.user.UserProfileResponse;
+import com.tripnext.demo.service.AccountService;
 import com.tripnext.demo.service.UserProfileService;
 
 import jakarta.validation.Valid;
@@ -20,6 +22,14 @@ import lombok.RequiredArgsConstructor;
 public class UserController {
 
     private final UserProfileService userProfileService;
+    private final AccountService accountService;
+
+    // Anonymizes the account and signs out everywhere (see AccountService).
+    @DeleteMapping("/me")
+    public ResponseEntity<Void> deleteMe() {
+        accountService.deleteCurrentAccount();
+        return ResponseEntity.noContent().build();
+    }
 
     @GetMapping("/me")
     public ResponseEntity<UserProfileResponse> me() {

@@ -442,3 +442,27 @@ tbody tr:hover td { background: var(--card-2); }
   .section-title h2 { font-size: 1.25rem; }
   .hero-photo h1 { font-size: 2.1rem; }
 }
+
+/* Location autocomplete */
+.loc-input { position: relative; width: 100%; }
+.loc-input input { padding-right: 30px; }
+.loc-pinned { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); color: var(--success); display: grid; }
+.loc-menu { position: absolute; z-index: 30; left: 0; right: 0; top: calc(100% + 4px); margin: 0; padding: 6px; list-style: none; background: var(--card); border: 1px solid var(--border); border-radius: 14px; box-shadow: var(--shadow-lg); max-height: 280px; overflow-y: auto; min-width: 260px; }
+.loc-menu li { padding: 8px 10px; border-radius: 10px; cursor: pointer; display: flex; flex-direction: column; gap: 1px; }
+.loc-menu li strong { font-size: 0.86rem; }
+.loc-menu li span { font-size: 0.74rem; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.loc-menu li:hover, .loc-menu li.active { background: var(--primary-soft); }
+
+/* Weather */
+.weather { display: flex; align-items: center; justify-content: space-between; gap: 18px; flex-wrap: wrap; }
+.weather-now { display: flex; align-items: center; gap: 14px; }
+.weather-now .big-icon { font-size: 2.4rem; }
+.weather-now .temp { font-size: 1.7rem; font-weight: 800; line-height: 1; }
+.weather-days { display: flex; gap: 8px; flex-wrap: wrap; }
+.wday { display: flex; flex-direction: column; align-items: center; gap: 1px; min-width: 62px; padding: 8px 6px; border-radius: 14px; background: var(--card-2); font-size: 0.82rem; }
+.wday .wicon { font-size: 1.3rem; }
+.wday .rain { font-size: 0.7rem; color: #2f6f9e; }
+
+/* Danger zone */
+.danger-zone { border-color: color-mix(in srgb, var(--danger) 30%, var(--border)); }
+.danger-zone h3 { color: var(--danger); }

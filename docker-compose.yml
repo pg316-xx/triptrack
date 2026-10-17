@@ -3,6 +3,7 @@
 # Frontend:      http://localhost:5173
 # Backend API:   http://localhost:${BACKEND_PORT:-8080}
 # S3 (SeaweedFS): http://localhost:${S3_PORT:-8333}
+# Mail inbox:    http://localhost:${MAILPIT_PORT:-8026}
 name: tripnest
 
 services:
@@ -68,6 +69,12 @@ services:
         done
         echo "buckets ready"
 
+  # Catches every outgoing email locally; open the inbox at http://localhost:${MAILPIT_PORT:-8026}
+  mailpit:
+    image: axllent/mailpit:v1.27.10
+    ports:
+      - "${MAILPIT_PORT:-8026}:8025"   # web UI (SMTP stays internal on 1025)
+
   backend:
     build: ./backend/demo
     depends_on:
@@ -96,6 +103,12 @@ services:
       S3_BUCKET_WALLET: wallet
       CORS_ALLOWED_ORIGINS: http://localhost:5173
       FRONTEND_URL: http://localhost:5173
+      SMTP_HOST: mailpit
+      SMTP_PORT: "1025"
+      MAIL_FROM: "TripNest <no-reply@tripnest.local>"
+      # Optional real providers (free keyless ones are used when empty)
+      GOOGLE_MAPS_API_KEY: ${GOOGLE_MAPS_API_KEY:-}
+      OPENWEATHER_API_KEY: ${OPENWEATHER_API_KEY:-}
       SPRING_JPA_SHOW_SQL: "false"
     ports:
       - "${BACKEND_PORT:-8080}:8080"
